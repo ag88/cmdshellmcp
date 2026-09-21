@@ -297,7 +297,6 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Default host: `127.0.0.1`
 - Default port: `8003`
 - Default allowlist is built from a small set of somewhat safe commands
-- The server does not support arbitrary shell pipelines or unrestricted command execution
 
 ## Typical use cases
 
