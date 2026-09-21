@@ -15,7 +15,7 @@ option. It also doesn't validate the arguments if they are after all safe.
 There are also tools (MCP functions exposed) that expose write and file modification ops, including
 executing shell commands.
 
-* do not use this with untrusted clients or LLMs, use it in a disposable sandbox e.g. a standalone docker
+* do not use this with untrusted clients or untrusted LLMs, use it in a disposable sandbox e.g. a standalone docker
   container that you can afford to throw away including the contents
 * review the allow list in `config.json` and the hardcoded defaults, revise them before using.
 
