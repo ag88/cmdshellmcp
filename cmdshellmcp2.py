@@ -400,6 +400,36 @@ def config_value(parser: argparse.ArgumentParser, config: dict[str, Any], key: s
     return value
 
 
+def resolve_working_directory(
+    parser: argparse.ArgumentParser,
+    value: Optional[str],
+    input_fn=input,
+) -> Path:
+    """Prompt for and validate the directory used by all local tools.
+
+    An omitted value is requested interactively, with the process's current
+    directory as the default.  When standard input is unavailable (for example,
+    when started as a service), the default is selected without failing startup.
+    """
+    default = Path.cwd()
+    if value is None:
+        try:
+            value = input_fn(f"Working directory [{default}]: ").strip()
+        except EOFError:
+            value = ""
+        if not value:
+            value = str(default)
+
+    try:
+        directory = Path(value).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        parser.error(f"invalid working directory {value!r}: {exc}")
+
+    if not directory.is_dir():
+        parser.error(f"working directory is not a directory: {directory}")
+    return directory
+
+
 if __name__ == "__main__":
     # Set level=logging.DEBUG here to include the original diagnostic messages.
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -407,7 +437,12 @@ if __name__ == "__main__":
         description="MCP server offering shell commands, file write and url fetch",
         fromfile_prefix_chars='@'
     )
-    parser.add_argument("--cwd", type=str, help="current working directory")
+    parser.add_argument(
+        "--cwd",
+        type=str,
+        metavar="PATH",
+        help="working directory; prompts with the current directory by default",
+    )
     parser.add_argument("--host", type=str, help="server bind host")
     parser.add_argument("--port", type=int, help="server bind port")
     parser.add_argument(
@@ -464,8 +499,7 @@ if __name__ == "__main__":
         ALLOWED_COMMANDS = normalize_commands(parser, configured_commands, "config")
 
     log.debug(args)
-    if not args.cwd is None:
-        cwd = Path(args.cwd)
+    cwd = resolve_working_directory(parser, args.cwd)
     log.info("working directory: %s", cwd)
     log.info("server address: %s:%s", host, port)
 

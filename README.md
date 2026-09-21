@@ -1,6 +1,6 @@
 # cmdshellmcp
 
-`cmdshellmcp` is a constrained command-shell [MCP](https://modelcontextprotocol.io/) server for AI agents. It exposes a small allowlisted Unix command set, safe file operations, patch application, and URL fetching so an MCP client can perform limited local tasks without unrestricted shell access.
+`cmdshellmcp` is a constrained command-shell [MCP](https://modelcontextprotocol.io/) server for AI agents. It exposes a small allowlisted Unix command set, somewhat safe file operations, patch application, and URL fetching so an MCP client can perform limited local tasks without unrestricted shell access.
 
 The server is implemented in Python and runs as an MCP server using the `fastmcp` package. By default it listens on `127.0.0.1:8003` using the streamable HTTP transport unless `--sse` is selected.
 
@@ -85,7 +85,11 @@ Start the server with the default settings:
 python cmdshellmcp2.py
 ```
 
-This starts the MCP server on `127.0.0.1:8003` using the streamable HTTP transport.
+When `--cwd` is omitted, the server prompts for a working directory and shows the
+process's current directory as the default. Press Enter to accept it. If standard
+input is unavailable (for example, when running as a service), the current
+directory is selected automatically. The server then starts on `127.0.0.1:8003`
+using the streamable HTTP transport.
 
 ### SSE mode
 
@@ -101,7 +105,9 @@ This runs the server on the SSE transport instead of streamable HTTP.
 python cmdshellmcp2.py --cwd /path/to/project
 ```
 
-This sets the working directory used by file and shell tools.
+This sets the working directory used by file and shell tools without prompting.
+The path must exist and must be a directory; `~` is expanded and the selected
+path is normalized to an absolute path.
 
 ### Custom host and port
 
@@ -136,7 +142,8 @@ python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
 
 Options:
 
-- `--cwd`: current working directory used for file and shell operations
+- `--cwd`: working directory used for file and shell operations; when omitted,
+  prompt with the process's current directory as the default
 - `--host`: server bind host
 - `--port`: server bind port
 - `--allow`: override the allowlist for the current process; may be repeated
@@ -156,7 +163,7 @@ This overrides `allowed_commands` from the config file for that process.
 
 ## Security model
 
-This server is intentionally restricted. It is designed to be safe in a controlled environment rather than as a general unrestricted shell.
+This server is intentionally restricted. It is designed to be somewhat safe in a controlled environment rather than as a general unrestricted shell.
 
 Security features include:
 
@@ -289,7 +296,7 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Default transport: `streamable-http`
 - Default host: `127.0.0.1`
 - Default port: `8003`
-- Default allowlist is built from a small set of safe commands
+- Default allowlist is built from a small set of somewhat safe commands
 - The server does not support arbitrary shell pipelines or unrestricted command execution
 
 ## Typical use cases
@@ -299,7 +306,7 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Writing small generated files or config changes
 - Applying small patches
 - Fetching documentation or data from the web
-- Running a limited set of safe diagnostics
+- Running a limited set of somewhat safe diagnostics
 
 This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
 
