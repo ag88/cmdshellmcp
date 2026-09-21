@@ -1,6 +1,6 @@
 # cmdshellmcp
 
-`cmdshellmcp` is a constrained command-shell MCP server for AI agents. It exposes a small allowlisted Unix command set, safe file operations, patch application, and URL fetching so an MCP client can perform limited local tasks without unrestricted shell access.
+`cmdshellmcp` is a constrained command-shell [MCP](https://modelcontextprotocol.io/) server for AI agents. It exposes a small allowlisted Unix command set, safe file operations, patch application, and URL fetching so an MCP client can perform limited local tasks without unrestricted shell access.
 
 The server is implemented in Python and runs as an MCP server using the `fastmcp` package. By default it listens on `127.0.0.1:8003` using the streamable HTTP transport unless `--sse` is selected.
 
