@@ -1,0 +1,13 @@
+{
+  "host": "127.0.0.1",
+  "port": 8003,
+  "quiet": false,
+  "auditlog": null,
+  "allowed_commands": [
+    "ls", "pwd", "date", "cat", "grep", "egrep",
+    "whoami", "cat", "head", "tail",
+    "sed", "wc", "file", "du", "df",
+    "free", "ps", "uname", "hostname",
+    "uptime", "w", "last", "mkdir", "cp", "mv", "awk"
+  ]
+}
