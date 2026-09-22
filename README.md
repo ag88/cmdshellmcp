@@ -99,6 +99,18 @@ python cmdshellmcp2.py --sse
 
 This runs the server on the SSE transport instead of streamable HTTP.
 
+### Browser clients and CORS
+
+Both HTTP transports include CORS middleware for browser-based MCP clients. The
+server accepts requests from any origin, supports the MCP `GET`, `POST`, and
+`DELETE` methods and browser preflight `OPTIONS` requests, and exposes the
+`mcp-session-id` response header to browser JavaScript.
+
+Because all origins are allowed, do not expose the server to an untrusted
+network without authentication and appropriate network controls. To restrict
+browser access, replace `allow_origins=["*"]` in `CORS_MIDDLEWARE` with the
+specific trusted origins.
+
 ### Custom working directory
 
 ```bash
@@ -308,5 +320,4 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Running a limited set of somewhat safe diagnostics
 
 This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
-
 
