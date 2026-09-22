@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from fastmcp.server import FastMCP
 from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 import asyncio
 from pathlib import Path
 import subprocess
@@ -22,6 +24,21 @@ cwd = Path.home()
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8003
+
+CORS_MIDDLEWARE = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "mcp-protocol-version",
+            "mcp-session-id",
+            "Authorization",
+            "Content-Type",
+        ],
+        expose_headers=["mcp-session-id"],
+    )
+]
 
 
 def configure_audit(quiet: bool = False, logfile: Optional[str] = None) -> None:
@@ -509,7 +526,19 @@ if __name__ == "__main__":
 
     if args.sse:
         log.info("running SSE transport")
-        mcp.run(transport="sse",log_level="INFO",host=host,port=port)
+        mcp.run(
+            transport="sse",
+            log_level="INFO",
+            host=host,
+            port=port,
+            middleware=CORS_MIDDLEWARE,
+        )
     else:
         log.info("running streamable-http transport")
-        mcp.run(transport="streamable-http",log_level="INFO",host=host,port=port)
+        mcp.run(
+            transport="streamable-http",
+            log_level="INFO",
+            host=host,
+            port=port,
+            middleware=CORS_MIDDLEWARE,
+        )
