@@ -8,6 +8,6 @@
     "whoami", "cat", "head", "tail",
     "sed", "wc", "file", "du", "df",
     "free", "ps", "uname", "hostname",
-    "uptime", "w", "last", "mkdir", "cp", "mv", "awk"
+    "uptime", "w", "last", "mkdir", "cp", "mv", "awk", "jq"
   ]
 }
