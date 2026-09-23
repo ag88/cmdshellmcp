@@ -67,7 +67,7 @@ Example:
 
 ```json
 {
-  "host": "lxrouter.local",
+  "host": "127.0.0.1",
   "port": 8003,
   "quiet": false,
   "auditlog": null,
