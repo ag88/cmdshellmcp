@@ -184,7 +184,7 @@ python cmdshellmcp2.py --disableTools writeFile,applyPatch,fetch
 ```
 
 This prevents matching tools from being registered by the server. *Tool names
-are case-sensitive and must match the names in the [MCP tools exposed to AI agents](#MCP_tools_exposed_to_AI_agents) section  below*. 
+are case-sensitive and must match the names in the [MCP tools exposed to AI agents](#MCP-tools-exposed-to-AI-agents) section  below*. 
 The command-line option overrides the `disableTools` list from the config file.
 
 ## Security model
