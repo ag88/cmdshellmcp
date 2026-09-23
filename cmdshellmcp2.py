@@ -24,6 +24,7 @@ cwd = Path.home()
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8003
+DEFAULT_CONFIG = "cmdshellmcp.json"
 
 CORS_MIDDLEWARE = [
     Middleware(
@@ -494,9 +495,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--conf",
-        default="config.json",
+        default=DEFAULT_CONFIG,
         metavar="FILE",
-        help="optional JSON config file (default: config.json)",
+        help=f"optional JSON config file (default: {DEFAULT_CONFIG} in the current directory)",
     )    
     parser.add_argument("--host", type=str, help="server bind host")
     parser.add_argument("--port", type=int, help="server bind port")
