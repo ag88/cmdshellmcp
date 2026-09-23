@@ -77,7 +77,8 @@ Example:
     "whoami", "head", "tail", "sed", "wc", "file", "du", "df",
     "free", "ps", "uname", "hostname", "uptime", "w", "last",
     "mkdir", "cp", "mv", "awk"
-  ]
+  ],
+  "auth": "_my_secret_auth_token_"
 }
 ```
 
