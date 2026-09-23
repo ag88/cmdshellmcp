@@ -29,6 +29,16 @@ executing shell commands.
 - Audit logging to stdout and/or a file
 - Path restrictions to prevent escaping the current working directory
 
+## AI use in this repo
+
+This app and its contents e.g. this page, is created with the aid of LLM (large language models) such as
+- ChatGPT 5.6 sol (light), Codex
+- Github Co-pilot MAI-Code-1.1-Flash
+
+Initial codes is written by the author and refactored with aid of the LLMs and updates is also done partly manually.
+After features are changed or edited, additional tests is often done by manually running them e.g.
+in [llama.cpp's llama-server Web UI](https://github.com/ggml-org/llama.cpp#quick-start)
+
 ## Installation
 
 1. Clone the repository.
