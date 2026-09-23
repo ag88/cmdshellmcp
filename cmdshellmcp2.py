@@ -61,13 +61,17 @@ def configure_audit(quiet: bool = False, logfile: Optional[str] = None) -> None:
 configure_audit()
 
 # Define your allowed whitelist
-DEFAULT_ALLOWED_COMMANDS = ["ls", "pwd", "echo", "date", "whoami"]
+SAFE_COMMANDS = ["date"]
+
+BASIC_COMMANDS = ["ls", "pwd", "echo", "whoami"]
 # more
 MORE_COMMANDS = ["cat", "head", "tail", "grep", "egrep", "sed", "wc", "file", "tree",
     "du", "df", "free", "ps", "uname", "hostname", "uptime", "w", "last"]
 # file change commands
 UPD_COMMANDS = ["mkdir", "cp", "mv", "awk"] 
 
+DEFAULT_ALLOWED_COMMANDS = SAFE_COMMANDS
+DEFAULT_ALLOWED_COMMANDS.extend(BASIC_COMMANDS)
 DEFAULT_ALLOWED_COMMANDS.extend(MORE_COMMANDS)
 DEFAULT_ALLOWED_COMMANDS.extend(UPD_COMMANDS)
 
