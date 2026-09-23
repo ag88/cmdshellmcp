@@ -59,6 +59,7 @@ Example:
   "port": 8003,
   "quiet": false,
   "auditlog": null,
+  "disableTools": ["writeFile", "applyPatch"],
   "allowed_commands": [
     "ls", "pwd", "date", "cat", "grep", "egrep",
     "whoami", "head", "tail", "sed", "wc", "file", "du", "df",
@@ -75,6 +76,7 @@ Supported configuration keys:
 - `quiet`: suppresses audit output to stdout when `true`
 - `auditlog`: optional path to an audit log file
 - `allowed_commands`: list of commands permitted for execution
+- `disableTools`: list of MCP tool names to omit from the server
 - `auth`: optional bearer token string
 
 ## Running the server
@@ -149,7 +151,7 @@ python cmdshellmcp2.py --quiet --auditlog /tmp/cmdshellmcp.log
 ```bash
 python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
   [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN] \
-  [--sse] [--quiet] [--auditlog FILE]
+  [--disableTools TOOL[,TOOL...]] [--sse] [--quiet] [--auditlog FILE]
 ```
 
 Options:
@@ -159,6 +161,8 @@ Options:
 - `--host`: server bind host
 - `--port`: server bind port
 - `--allow`: override the allowlist for the current process; may be repeated
+- `--disableTools`: comma-separated MCP tool names to omit; overrides the
+  `disableTools` list from the config file
 - `--conf`: JSON config file path (default: `config.json`)
 - `--auth`: bearer token required for authentication
 - `--sse`: use SSE transport instead of streamable HTTP
@@ -172,6 +176,16 @@ python cmdshellmcp2.py --allow ls pwd date whoami cat grep
 ```
 
 This overrides `allowed_commands` from the config file for that process.
+
+### Disabling tools
+
+```bash
+python cmdshellmcp2.py --disableTools writeFile,applyPatch,fetch
+```
+
+This prevents matching tools from being registered by the server. Tool names
+are case-sensitive and must match the names in the MCP tools list below. The
+command-line option overrides the `disableTools` list from the config file.
 
 ## Security model
 
@@ -320,4 +334,3 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Running a limited set of somewhat safe diagnostics
 
 This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
-

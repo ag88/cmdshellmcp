@@ -316,8 +316,15 @@ Args:
 """
 
 
-def create_server(host: str, port: int, allowed_commands: list[str], auth: str) -> FastMCP:
+def create_server(
+    host: str,
+    port: int,
+    allowed_commands: list[str],
+    auth: str,
+    disable_tools: Optional[list[str]] = None,
+) -> FastMCP:
     """Create the server and register tools after configuration is resolved."""
+    disabled = set(disable_tools or [])
     if auth:
         verifier = StaticTokenVerifier(
             tokens={
@@ -334,12 +341,17 @@ def create_server(host: str, port: int, allowed_commands: list[str], auth: str) 
         name="LimitedShell",
         auth=verifier
     )
-    server.tool(description=cmdshell_description(allowed_commands))(cmdshell)
-    server.tool()(writeFile)
-    server.tool()(readFile)
-    server.tool()(listFiles)
-    server.tool()(applyPatch)
-    server.tool()(fetch)
+    tools = (
+        ("cmdshell", cmdshell, cmdshell_description(allowed_commands)),
+        ("writeFile", writeFile, None),
+        ("readFile", readFile, None),
+        ("listFiles", listFiles, None),
+        ("applyPatch", applyPatch, None),
+        ("fetch", fetch, None),
+    )
+    for name, tool, description in tools:
+        if name not in disabled:
+            server.tool(description=description)(tool)
     return server
 
 
@@ -401,6 +413,29 @@ def normalize_commands(parser: argparse.ArgumentParser, value: Any, source: str)
     if not commands:
         parser.error(f"{source} allowed_commands cannot be empty")
     return commands
+
+
+def normalize_disabled_tools(
+    parser: argparse.ArgumentParser, value: Any, source: str
+) -> list[str]:
+    """Validate and de-duplicate disabled tool names while preserving order."""
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, list):
+        values = value
+    else:
+        parser.error(f"{source} disableTools must be a list of strings")
+
+    disabled_tools = []
+    for tool in values:
+        if not isinstance(tool, str):
+            parser.error(f"{source} disableTools must contain only strings")
+        tool = tool.strip()
+        if not tool or any(char.isspace() for char in tool):
+            parser.error(f"invalid tool name in {source} disableTools: {tool!r}")
+        if tool not in disabled_tools:
+            disabled_tools.append(tool)
+    return disabled_tools
 
 
 def config_value(parser: argparse.ArgumentParser, config: dict[str, Any], key: str, default: Any) -> Any:
@@ -470,6 +505,11 @@ if __name__ == "__main__":
         help="allowed command(s); may be repeated and overrides allowed_commands from config",
     )
     parser.add_argument(
+        "--disableTools",
+        metavar="TOOL[,TOOL...]",
+        help="comma-separated tool names to omit; overrides disableTools from config",
+    )
+    parser.add_argument(
         "--conf",
         default="config.json",
         metavar="FILE",
@@ -515,12 +555,18 @@ if __name__ == "__main__":
     else:
         ALLOWED_COMMANDS = normalize_commands(parser, configured_commands, "config")
 
+    configured_disabled_tools = config.get("disableTools", [])
+    if args.disableTools is not None:
+        disable_tools = normalize_disabled_tools(parser, args.disableTools, "--disableTools")
+    else:
+        disable_tools = normalize_disabled_tools(parser, configured_disabled_tools, "config")
+
     log.debug(args)
     cwd = resolve_working_directory(parser, args.cwd)
     log.info("working directory: %s", cwd)
     log.info("server address: %s:%s", host, port)
 
-    mcp = create_server(host, port, ALLOWED_COMMANDS, auth)
+    mcp = create_server(host, port, ALLOWED_COMMANDS, auth, disable_tools)
     asyncio.run(listtools(mcp))
     log.info("allowed commands: %s", ALLOWED_COMMANDS)
 
