@@ -3,6 +3,7 @@
   "port": 8003,
   "quiet": false,
   "auditlog": null,
+  "disableTools": ["writeFile", "applyPatch"],  
   "allowed_commands": [
     "ls", "pwd", "date", "cat", "grep", "egrep",
     "whoami", "cat", "head", "tail",
