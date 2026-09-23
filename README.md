@@ -76,7 +76,7 @@ Supported configuration keys:
 - `quiet`: suppresses audit output to stdout when `true`
 - `auditlog`: optional path to an audit log file
 - `allowed_commands`: list of commands permitted for execution
-- `disableTools`: list of MCP tool names to omit from the server
+- `disableTools`: list of MCP tool names to omit from the server, case sensitive and exact name match is required
 - `auth`: optional bearer token string
 
 ## Running the server
@@ -162,7 +162,7 @@ Options:
 - `--port`: server bind port
 - `--allow`: override the allowlist for the current process; may be repeated
 - `--disableTools`: comma-separated MCP tool names to omit; overrides the
-  `disableTools` list from the config file
+  `disableTools` list from the config file; case sensitive and exact name match is required
 - `--conf`: JSON config file path (default: `config.json`)
 - `--auth`: bearer token required for authentication
 - `--sse`: use SSE transport instead of streamable HTTP
@@ -183,9 +183,9 @@ This overrides `allowed_commands` from the config file for that process.
 python cmdshellmcp2.py --disableTools writeFile,applyPatch,fetch
 ```
 
-This prevents matching tools from being registered by the server. Tool names
-are case-sensitive and must match the names in the MCP tools list below. The
-command-line option overrides the `disableTools` list from the config file.
+This prevents matching tools from being registered by the server. *Tool names
+are case-sensitive and must match the names in the [MCP tools exposed to AI agents](#MCP_tools_exposed_to_AI_agents) section  below*. 
+The command-line option overrides the `disableTools` list from the config file.
 
 ## Security model
 
