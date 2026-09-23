@@ -17,7 +17,7 @@ executing shell commands.
 
 * do not use this with untrusted clients or untrusted LLMs, use it in a disposable sandbox e.g. a standalone docker
   container that you can afford to throw away including the contents
-* review the allow list in `config.json` and the hardcoded defaults, revise them before using.
+* review the allow list in `cmdshellmcp.json` and the hardcoded defaults, revise them before using.
 
 ## Features
 
@@ -59,7 +59,9 @@ pip install -r requirements.txt
 
 ## Configuration
 
-The server reads an optional JSON configuration from `config.json` by default.
+When `--conf` is not given, the server reads the optional `cmdshellmcp.json`
+configuration file from the current directory. If the file does not exist, the
+server uses command-line and built-in default values.
 
 Example:
 
@@ -173,7 +175,8 @@ Options:
 - `--allow`: override the allowlist for the current process; may be repeated
 - `--disableTools`: comma-separated MCP tool names to omit; overrides the
   `disableTools` list from the config file; case sensitive and exact name match is required
-- `--conf`: JSON config file path (default: `config.json`)
+- `--conf`: JSON config file path; when omitted, defaults to
+  `cmdshellmcp.json` in the current directory
 - `--auth`: bearer token required for authentication
 - `--sse`: use SSE transport instead of streamable HTTP
 - `--quiet`: suppress audit output on stdout
