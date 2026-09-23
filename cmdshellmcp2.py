@@ -495,6 +495,12 @@ if __name__ == "__main__":
         metavar="PATH",
         help="working directory; prompts with the current directory by default",
     )
+    parser.add_argument(
+        "--conf",
+        default="config.json",
+        metavar="FILE",
+        help="optional JSON config file (default: config.json)",
+    )    
     parser.add_argument("--host", type=str, help="server bind host")
     parser.add_argument("--port", type=int, help="server bind port")
     parser.add_argument(
@@ -507,13 +513,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--disableTools",
         metavar="TOOL[,TOOL...]",
-        help="comma-separated tool names to omit; overrides disableTools from config",
-    )
-    parser.add_argument(
-        "--conf",
-        default="config.json",
-        metavar="FILE",
-        help="optional JSON config file (default: config.json)",
+        help="comma-separated tool names to omit; overrides disableTools from config; case sensitive and exact name match is required",
     )
     parser.add_argument(
         "--auth",
