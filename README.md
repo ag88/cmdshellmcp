@@ -10,7 +10,8 @@ The server is implemented in Python and runs as an MCP server using the `fastmcp
 ## Warning
 
 This is a scratch / experimental app that evolved out of using an MCP server (tools) that allow running shell commands for coding purpose.
-Unfortunately, 
+Unfortunately, for such a purpose, one often needs to provide the LLM (model) client with rather powerful shell commands to "do its job"
+for a particular scope / context / intent.
 
 The default allowed commands are not necessarily safe, i.e. LLM agents or practically clients calling
 the MCP api can 'escape' and do things outside a context e.g. the working directory defined with `--cwd`
