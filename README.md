@@ -19,9 +19,11 @@ option. It also doesn't validate the arguments if they are after all safe.
 There are also tools (MCP functions exposed) that expose write and file modification ops, including
 executing shell commands.
 
-* do not use this with untrusted clients or untrusted LLMs
-* use it in a disposable sandbox e.g. a standalone docker container that you can afford to throw away including the contents
-* review the allow list in `cmdshellmcp.json` and the hardcoded defaults, revise them before using.
+* Always use an **auth_token** e.g. using the **auth** field in the config file or **--auth** for basic authentication.
+  Not having that practically means you are giving remote command execution (RCE) to any \(including possibly malicious or rogue\) clients.
+* Do not use this with untrusted clients or untrusted LLMs
+* Use it in a disposable sandbox e.g. a standalone docker container that you can afford to throw away including the contents
+* Review the allow list in `cmdshellmcp.json` and the hardcoded defaults, revise them before using.
 
 ## Features
 
