@@ -20,8 +20,10 @@ option. It also doesn't validate the arguments if they are after all safe.
 There are also tools (MCP functions exposed) that expose write and file modification ops, including
 executing shell commands.
 
-* Always use an **auth_token** e.g. using the **auth** field in the config file or **--auth** for basic authentication.
-  Not having that practically means you are giving remote command execution (RCE) to any \(including possibly malicious or rogue\) clients.
+* Authentication is enabled by default. Keep the randomly generated token, or set
+  a fixed **auth_token** using the **auth** field in the config file or `--auth`.
+  Using `--noauth` practically means you are giving remote command execution
+  (RCE) to any \(including possibly malicious or rogue\) clients that can reach the server.
 * Do not use this with untrusted clients or untrusted LLMs
 * Use it in a disposable sandbox e.g. a standalone docker container or virtual machine that you can afford to throw away including the contents
 * Review the allow list in `cmdshellmcp.json` and the hardcoded defaults, revise them before using.
@@ -32,7 +34,7 @@ executing shell commands.
 - File read/write/list operations under a configured working directory
 - Unified diff patch application via `patch`
 - HTTP fetch support with optional HTML prettification
-- Optional bearer token authentication
+- Bearer token authentication with a secure, randomly generated token by default
 - Audit logging to stdout and/or a file
 - Path restrictions to prevent escaping the current working directory
 
@@ -97,7 +99,7 @@ Supported configuration keys:
 - `auditlog`: optional path to an audit log file
 - `allowed_commands`: list of commands permitted for execution
 - `disableTools`: list of MCP tool names to omit from the server, case sensitive and exact name match is required
-- `auth`: optional bearer token string
+- `auth`: optional fixed bearer token string; when omitted, a random token is generated at startup
 
 ## Running the server
 
@@ -151,11 +153,27 @@ python cmdshellmcp2.py --host 0.0.0.0 --port 9000
 
 ### Authentication
 
+Authentication is enabled by default. If neither `--auth` nor an `auth` value in
+the configuration file supplies a fixed token, the server generates a
+cryptographically secure, base64-encoded token and displays it in the startup
+log. The generated token is shown in bold when stdout supports ANSI styling.
+Configure the MCP client to send that value as its bearer token.
+
+To use a fixed token instead:
+
 ```bash
 python cmdshellmcp2.py --auth my-secret-token
 ```
 
-If present, the server requires a bearer token.
+To explicitly run without authentication:
+
+```bash
+python cmdshellmcp2.py --noauth
+```
+
+`--auth` and `--noauth` are mutually exclusive. `--noauth` also overrides an
+`auth` value in the configuration file. Disabling authentication is unsafe on
+any network that is not completely trusted.
 
 ### Audit logging
 
@@ -170,7 +188,7 @@ python cmdshellmcp2.py --quiet --auditlog /tmp/cmdshellmcp.log
 
 ```bash
 python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
-  [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN] \
+  [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN | --noauth] \
   [--disableTools TOOL[,TOOL...]] [--sse] [--quiet] [--auditlog FILE]
 ```
 
@@ -185,7 +203,9 @@ Options:
   `disableTools` list from the config file; case sensitive and exact name match is required
 - `--conf`: JSON config file path; when omitted, defaults to
   `cmdshellmcp.json` in the current directory
-- `--auth`: bearer token required for authentication
+- `--auth`: use a fixed bearer token instead of generating one
+- `--noauth`: explicitly disable bearer authentication; mutually exclusive with
+  `--auth` and unsafe on untrusted networks
 - `--sse`: use SSE transport instead of streamable HTTP
 - `--quiet`: suppress audit output on stdout
 - `--auditlog`: write audit logs to a given file
