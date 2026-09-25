@@ -4,7 +4,9 @@ from fastmcp.server.auth.providers.jwt import StaticTokenVerifier
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
+import base64
 from pathlib import Path
+import secrets
 import subprocess
 import argparse
 import shlex
@@ -25,6 +27,7 @@ cwd = Path.home()
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8003
 DEFAULT_CONFIG = "cmdshellmcp.json"
+AUTH_TOKEN_BYTES = 32
 
 CORS_MIDDLEWARE = [
     Middleware(
@@ -450,6 +453,42 @@ def config_value(parser: argparse.ArgumentParser, config: dict[str, Any], key: s
     return value
 
 
+def generate_auth_token() -> str:
+    """Return a cryptographically secure, base64-encoded bearer token."""
+    return base64.b64encode(secrets.token_bytes(AUTH_TOKEN_BYTES)).decode("ascii")
+
+
+def resolve_auth(
+    parser: argparse.ArgumentParser,
+    cli_auth: Optional[str],
+    noauth: bool,
+    config: dict[str, Any],
+) -> tuple[Optional[str], bool]:
+    """Resolve authentication and report whether the token was generated."""
+    configured_auth = config.get("auth")
+    if configured_auth is not None and (
+        not isinstance(configured_auth, str) or not configured_auth
+    ):
+        parser.error("config auth must be a non-empty string or null")
+
+    if noauth:
+        return None, False
+    if cli_auth is not None:
+        if not cli_auth:
+            parser.error("--auth token cannot be empty")
+        return cli_auth, False
+    if configured_auth:
+        return configured_auth, False
+    return generate_auth_token(), True
+
+
+def highlighted(value: str, stream=sys.stdout) -> str:
+    """Make a startup secret bold when output is attached to an ANSI terminal."""
+    if hasattr(stream, "isatty") and stream.isatty():
+        return f"\033[1m{value}\033[0m"
+    return value
+
+
 def resolve_working_directory(
     parser: argparse.ArgumentParser,
     value: Optional[str],
@@ -513,11 +552,17 @@ if __name__ == "__main__":
         metavar="TOOL[,TOOL...]",
         help="comma-separated tool names to omit; overrides disableTools from config; case sensitive and exact name match is required",
     )
-    parser.add_argument(
+    auth_group = parser.add_mutually_exclusive_group()
+    auth_group.add_argument(
         "--auth",
         metavar="auth_token",
         help="auth token for Bearer authentication",
-    )    
+    )
+    auth_group.add_argument(
+        "--noauth",
+        action="store_true",
+        help="disable Bearer authentication (unsafe on untrusted networks)",
+    )
     parser.add_argument("--sse", action='store_true', help="use sse transport")
     parser.add_argument("--quiet", action="store_true", default=None, help="do not print audit events to stdout")
     parser.add_argument(
@@ -540,12 +585,7 @@ if __name__ == "__main__":
     if not 1 <= port <= 65535:
         parser.error("port must be in the range 1..65535")
 
-    if args.auth:
-        auth = args.auth
-    elif config.get("auth"):
-        auth = config.get("auth")
-    else:
-        auth = None        
+    auth, generated_auth = resolve_auth(parser, args.auth, args.noauth, config)
 
     configured_commands = config.get("allowed_commands", DEFAULT_ALLOWED_COMMANDS)
     if args.allow is not None:
@@ -563,6 +603,10 @@ if __name__ == "__main__":
     cwd = resolve_working_directory(parser, args.cwd)
     log.info("working directory: %s", cwd)
     log.info("server address: %s:%s", host, port)
+    if generated_auth:
+        log.info("generated auth token: %s", highlighted(auth))
+    elif auth is None:
+        log.warning("authentication is disabled by --noauth")
 
     mcp = create_server(host, port, ALLOWED_COMMANDS, auth, disable_tools)
     asyncio.run(listtools(mcp))
