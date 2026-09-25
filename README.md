@@ -24,7 +24,7 @@ executing shell commands.
   a fixed **auth_token** using the **auth** field in the config file or `--auth`.
   Using `--noauth` practically means you are giving remote command execution
   (RCE) to any \(including possibly malicious or rogue\) clients that can reach the server.
-* Run this as an unprivileged user. running as `root` is at best foolish
+* Run this as an unprivileged user. Running as `root` is at best foolish
 * Do not use this with untrusted clients or untrusted LLMs
 * Use it in a disposable sandbox e.g. a standalone docker container or virtual machine that you can afford to throw away including the contents
 * Review the allow list in `cmdshellmcp.json` and the hardcoded defaults, revise them before using.
