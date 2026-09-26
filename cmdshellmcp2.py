@@ -12,10 +12,13 @@ import argparse
 import shlex
 import json
 import glob
+import os
 import requests
+import shutil
 from bs4 import BeautifulSoup
 import logging
 import sys
+import tempfile
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
@@ -81,6 +84,9 @@ DEFAULT_ALLOWED_COMMANDS = SAFE_COMMANDS
 
 # Replaced with the effective configuration before tools are registered.
 ALLOWED_COMMANDS = DEFAULT_ALLOWED_COMMANDS.copy()
+
+# Set from --editdelbk before tools are registered.
+EDIT_DELETE_BACKUP = False
 
 
 def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
@@ -226,6 +232,172 @@ def listFiles(path: str = ".") -> str:
         return f"Error listing files {path}: {exc}"
 
 
+def _edit_file_args_error(args: list[str]) -> Optional[str]:
+    """Reject sed arguments that can supply programs or select other files."""
+    safe_long_options = {"--quiet", "--silent", "--regexp-extended", "--posix"}
+    safe_short_options = {"n", "E", "r", "s", "u"}
+    for arg in args:
+        if arg in safe_long_options:
+            continue
+        if arg.startswith("-") and not arg.startswith("--") and len(arg) > 1:
+            if all(option in safe_short_options for option in arg[1:]):
+                continue
+        return f"Error: sed argument is not allowed: {arg!r}"
+    return None
+
+
+def _remove_unused_backup(backup_path: Path) -> None:
+    """Best-effort cleanup for a backup made before a failed, non-writing edit."""
+    try:
+        backup_path.unlink()
+    except OSError as exc:
+        audit.error("editFile could not remove unused backup %s: %s", backup_path, exc)
+
+
+def editFile(file: str, script: str, args: Optional[list[str]] = None) -> str:
+    """Edit an existing local text file with sed and retain a numbered backup."""
+    error = _local_path_error(file)
+    if error:
+        audit.error("editFile %r: %s", file, error)
+        return error
+    if not isinstance(script, str) or not script:
+        error = "Error: a non-empty sed script is required"
+        audit.error("editFile %s: %s", file, error)
+        return error
+    if args is None:
+        args = []
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        error = "Error: sed args must be a list of strings"
+        audit.error("editFile %s: %s", file, error)
+        return error
+    error = _edit_file_args_error(args)
+    if error:
+        audit.error("editFile %s: %s", file, error)
+        return error
+
+    source_path = cwd / file
+    audit.info("editFile: %s", file)
+    if not source_path.exists():
+        error = f"Error: source file does not exist: {file}"
+        audit.error("editFile %s: source does not exist", file)
+        return error
+    if not source_path.is_file():
+        error = f"Error: source path is not a regular file: {file}"
+        audit.error("editFile %s: source is not a regular file", file)
+        return error
+
+    backup_path = None
+    try:
+        number = 1
+        while True:
+            candidate = source_path.with_name(f"{source_path.name}.bk{number}")
+            try:
+                # Reserve the name atomically so a concurrent edit cannot overwrite it.
+                descriptor = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                os.close(descriptor)
+                backup_path = candidate
+                break
+            except FileExistsError:
+                number += 1
+        shutil.copy2(source_path, backup_path)
+    except Exception as exc:
+        if backup_path is not None:
+            _remove_unused_backup(backup_path)
+        audit.error("editFile backup failed for %s: %s", file, exc)
+        return f"Error: could not create backup for {file}: {exc}"
+
+    backup_name = str(backup_path.relative_to(cwd))
+    audit.info("editFile backup: %s", backup_name)
+    command = ["sed", "--sandbox", *args, "-e", script, "--", file]
+    audit.info("editFile sed: %s", shlex.join(command))
+    try:
+        result = subprocess.run(command, capture_output=True, cwd=cwd, timeout=100)
+    except subprocess.TimeoutExpired:
+        _remove_unused_backup(backup_path)
+        audit.error("editFile sed timed out for %s", file)
+        return "Error: sed execution timed out; the original file is unchanged"
+    except Exception as exc:
+        _remove_unused_backup(backup_path)
+        audit.error("editFile could not start sed for %s: %s", file, exc)
+        return f"Error: could not start sed: {exc}"
+
+    stderr = result.stderr.decode("utf-8", errors="replace").strip()
+    if result.returncode != 0:
+        _remove_unused_backup(backup_path)
+        audit.error("editFile sed failed (%s): %s", result.returncode, stderr)
+        detail = f": {stderr}" if stderr else ""
+        return f"Error: sed failed with exit status {result.returncode}{detail}"
+
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=source_path.parent, prefix=f".{source_path.name}.", delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(result.stdout)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        shutil.copystat(backup_path, temporary_path)
+        os.replace(temporary_path, source_path)
+        temporary_path = None
+    except Exception as exc:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
+        audit.error(
+            "editFile replacement failed for %s; backup %s retained: %s",
+            file, backup_name, exc,
+        )
+        return f"Error: could not replace {file}: {exc}. Backup retained: {backup_name}"
+
+    diff_command = ["diff", "-u", backup_name, file]
+    try:
+        diff_result = subprocess.run(
+            diff_command, capture_output=True, text=True, cwd=cwd, timeout=100
+        )
+    except subprocess.TimeoutExpired:
+        audit.error("editFile diff timed out for %s", file)
+        return f"Error: edit completed but diff timed out. Backup retained: {backup_name}"
+    except Exception as exc:
+        audit.error("editFile could not run diff for %s: %s", file, exc)
+        return f"Error: edit completed but diff could not run: {exc}. Backup retained: {backup_name}"
+
+    if diff_result.returncode not in (0, 1):
+        detail = diff_result.stderr.strip()
+        audit.error("editFile diff failed (%s): %s", diff_result.returncode, detail)
+        return (
+            f"Error: edit completed but diff failed with exit status "
+            f"{diff_result.returncode}: {detail}. Backup retained: {backup_name}"
+        )
+
+    heading = f"Success: the edit is done. Backup: {backup_name}"
+    if diff_result.returncode == 0:
+        response = f"{heading}\n\nThe edit produced no differences."
+    else:
+        response = f"{heading}\n\nBelow is the unified diff:\n\n{diff_result.stdout}"
+
+    if EDIT_DELETE_BACKUP:
+        try:
+            backup_path.unlink()
+        except OSError as exc:
+            audit.error("editFile could not delete backup %s: %s", backup_name, exc)
+            return (
+                f"Error: edit completed but backup {backup_name} could not be deleted: "
+                f"{exc}\n\n{response}"
+            )
+        response = response.replace(
+            heading,
+            f"Success: the edit is done. Backup deleted: {backup_name}",
+            1,
+        )
+        audit.info("editFile deleted backup: %s", backup_name)
+
+    audit.info("editFile completed: %s", file)
+    return response
+
+
 def applyPatch(text: str, args: Optional[list[str]] = None, context: int = 2) -> str:
     """Apply context/unified diff text using patch; args are passed to patch.
 
@@ -317,6 +489,29 @@ Args:
 """
 
 
+def editFile_description() -> str:
+    """Return the detailed safety and behavior contract advertised for editFile."""
+    return """Edits an existing local text file using a sed expression/program.
+
+Args:
+    file: Local path of the file to edit, limited to the configured current directory and its descendants.
+    script: The authoritative sed editing expression/program.
+    args: Optional safe sed arguments. Options that enable in-place editing, supply another
+          expression or program file, select other files, or execute commands are not allowed.
+
+Before editing, the tool creates the next available numbered backup (.bk1, .bk2,
+.bk3, and so on), and never overwrites an existing backup. The source file is
+replaced only after sandboxed sed completes successfully. On success, the response
+contains a `diff -u` unified diff from the backup/original version to the edited
+file. If sed fails while the original is unchanged, the newly created backup is
+removed. When the server is started with `--editdelbk`, a successful edit's
+backup is deleted only after the unified diff response has been composed.
+
+Example: file="src/example.py", script="s/old_name/new_name/g". The resulting
+backup might be `src/example.py.bk1`.
+"""
+
+
 def create_server(
     host: str,
     port: int,
@@ -347,6 +542,7 @@ def create_server(
         ("writeFile", writeFile, None),
         ("readFile", readFile, None),
         ("listFiles", listFiles, None),
+        ("editFile", editFile, editFile_description()),
         ("applyPatch", applyPatch, None),
         ("fetch", fetch, None),
     )
@@ -564,12 +760,18 @@ if __name__ == "__main__":
         help="disable Bearer authentication (unsafe on untrusted networks)",
     )
     parser.add_argument("--sse", action='store_true', help="use sse transport")
+    parser.add_argument(
+        "--editdelbk",
+        action="store_true",
+        help="delete editFile's numbered backup after composing a successful diff response",
+    )
     parser.add_argument("--quiet", action="store_true", default=None, help="do not print audit events to stdout")
     parser.add_argument(
         "--auditlog", "--auditlogfile", "--auditlologfile.log",
         dest="auditlog", metavar="FILE", help="append session audit events to FILE",
     )
     args = parser.parse_args()
+    EDIT_DELETE_BACKUP = args.editdelbk
 
     config = load_config(parser, args.conf)
 

@@ -33,6 +33,7 @@ executing shell commands.
 
 - Allowlisted shell execution for a curated set of commands
 - File read/write/list operations under a configured working directory
+- Transactional text-file editing with `sed`, numbered backups, and unified diffs
 - Unified diff patch application via `patch`
 - HTTP fetch support with optional HTML prettification
 - Bearer token authentication with a secure, randomly generated token by default
@@ -67,6 +68,10 @@ If your environment uses a `requirements.txt`, you can also install from there:
 pip install -r requirements.txt
 ```
 
+The `editFile` tool also requires GNU `sed` (including its `--sandbox` option)
+and `diff` to be installed on the server. These programs are invoked directly by
+the dedicated tool and do not need to appear in `allowed_commands`.
+
 ## Configuration
 
 When `--conf` is not given, the server reads the optional `cmdshellmcp.json`
@@ -81,7 +86,7 @@ Example:
   "port": 8003,
   "quiet": false,
   "auditlog": null,
-  "disableTools": ["writeFile", "applyPatch"],
+  "disableTools": ["writeFile", "editFile", "applyPatch"],
   "allowed_commands": [
     "ls", "pwd", "date", "cat", "grep", "egrep",
     "whoami", "head", "tail", "sed", "wc", "file", "du", "df",
@@ -190,7 +195,8 @@ python cmdshellmcp2.py --quiet --auditlog /tmp/cmdshellmcp.log
 ```bash
 python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
   [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN | --noauth] \
-  [--disableTools TOOL[,TOOL...]] [--sse] [--quiet] [--auditlog FILE]
+  [--disableTools TOOL[,TOOL...]] [--editdelbk] [--sse] [--quiet] \
+  [--auditlog FILE]
 ```
 
 Options:
@@ -202,6 +208,8 @@ Options:
 - `--allow`: override the allowlist for the current process; may be repeated
 - `--disableTools`: comma-separated MCP tool names to omit; overrides the
   `disableTools` list from the config file; case sensitive and exact name match is required
+- `--editdelbk`: delete the numbered backup after `editFile` has completed
+  successfully and composed its unified diff response
 - `--conf`: JSON config file path; when omitted, defaults to
   `cmdshellmcp.json` in the current directory
 - `--auth`: use a fixed bearer token instead of generating one
@@ -222,7 +230,7 @@ This overrides `allowed_commands` from the config file for that process.
 ### Disabling tools
 
 ```bash
-python cmdshellmcp2.py --disableTools writeFile,applyPatch,fetch
+python cmdshellmcp2.py --disableTools writeFile,editFile,applyPatch,fetch
 ```
 
 This prevents matching tools from being registered by the server. *Tool names
@@ -241,8 +249,11 @@ Security features include:
 - Piping is not supported by design
 - File tools reject absolute paths and paths containing `..`
 - Writes are limited to locations beneath the configured `cwd`
+- `editFile` accepts only a small allowlist of non-file-selecting `sed` options,
+  runs GNU `sed` in sandbox mode, and does not invoke a shell
+- `editFile` writes successful output to a temporary file before atomically
+  replacing the source; failed `sed` runs leave the source unchanged
 - Patch application blocks dangerous path-changing options
-- Diff path validation prevents escaping the working directory
 
 In short: the shell is a narrow sandbox for controlled read/write operations, not a full-host terminal.
 
@@ -315,7 +326,63 @@ listFiles("src")
 
 Returns a newline-separated list of entries, with `/` appended for directories.
 
-### 5. `applyPatch(text, args=None, context=2)`
+### 5. `editFile(file, script, args=None)`
+
+Edits an existing text file beneath the configured working directory using GNU
+`sed`. The dedicated `script` parameter is the only source of the editing
+program; the command is executed with an argument list rather than through a
+shell.
+
+Parameters:
+
+- `file`: relative path of an existing regular file beneath `cwd`
+- `script`: a `sed` editing expression or program, such as `s/old/new/g`,
+  `/pattern/d`, or `10,20s/old/new/g`
+- `args`: optional safe `sed` options, such as `-n` or `-E`; options that enable
+  in-place editing, provide another expression or program file, or select
+  additional input/output files are rejected
+
+Example:
+
+```python
+editFile("src/example.py", "s/old_name/new_name/g")
+```
+
+Before running `sed`, the tool copies the source to the next unused numbered
+backup. For example, the first edit above creates `src/example.py.bk1`; if that
+name exists, it uses `.bk2`, then `.bk3`, and so on. Existing backups are never
+overwritten.
+
+`sed` writes its proposed result to memory while running in sandbox mode, which
+blocks GNU `sed` commands that read files, write files, or execute programs. The
+source is replaced from a same-directory temporary file only after `sed` exits
+successfully. A failed `sed` run leaves the source unchanged and removes the new,
+unneeded backup. If replacement has begun and a later step fails, the backup is
+retained for recovery.
+
+On success, the response identifies the backup and includes the output of:
+
+```bash
+diff -u src/example.py.bk1 src/example.py
+```
+
+The backup is the old version and the current file is the new version. A no-op
+edit is reported explicitly and still retains its numbered backup.
+
+Start the server with `--editdelbk` to remove each numbered backup after a
+successful edit. The tool first runs `diff` and composes the complete response,
+so the returned unified diff remains available even though the backup has been
+deleted. The success message identifies the deleted backup. Backups are still
+retained when replacement or diff generation fails, so they remain available
+for recovery. If backup deletion itself fails, the response begins with `Error:`
+and reports that the edit completed but the backup remains.
+
+> **Security note:** backups contain the complete pre-edit file, including any
+> secrets it held. Unless `--editdelbk` is enabled, they remain on disk after
+> successful edits. Protect and remove them according to the same retention
+> policy as the source file.
+
+### 6. `applyPatch(text, args=None, context=2)`
 
 Applies a unified or context diff using the system `patch` command.
 
@@ -335,7 +402,7 @@ applyPatch(
 
 The function blocks dangerous path-changing patch flags and rejects absolute paths.
 
-### 6. `fetch(url, prettify=False)`
+### 7. `fetch(url, prettify=False)`
 
 Fetches a URL using `requests`. If `prettify` is `true`, it parses the HTML with BeautifulSoup and pretty-prints it.
 
@@ -371,6 +438,7 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Inspecting repository and filesystem state
 - Reading source files and logs
 - Writing small generated files or config changes
+- Making reviewable text substitutions with automatic backups
 - Applying small patches
 - Fetching documentation or data from the web
 - Running a limited set of somewhat safe diagnostics
