@@ -30,7 +30,7 @@ cwd = Path.home()
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8003
 DEFAULT_CONFIG = "cmdshellmcp.json"
-AUTH_TOKEN_BYTES = 32
+AUTH_TOKEN_BYTES = 16
 
 CORS_MIDDLEWARE = [
     Middleware(
