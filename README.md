@@ -382,25 +382,34 @@ and reports that the edit completed but the backup remains.
 > successful edits. Protect and remove them according to the same retention
 > policy as the source file.
 
-### 6. `applyPatch(text, args=None, context=2)`
+### 6. `applyPatch(file, diff, pnum=2, args=None)`
 
-Applies a unified or context diff using the system `patch` command.
+Applies a diff to one explicitly named file using GNU `patch`. The diff is
+normally a unified diff and is passed directly to `patch` over standard input.
 
 Parameters:
 
-- `text`: patch text to apply
-- `args`: optional extra patch arguments
-- `context`: fuzz level for patch matching; default `2`
+- `file`: existing regular file beneath the configured current directory
+- `diff`: patch text, normally a unified diff
+- `pnum`: number of leading path components to strip, corresponding to GNU
+  patch's `-pNUM`; default `2`
+- `args`: optional allowlisted GNU patch flags; options that can select another
+  target, input, output, directory, backup/reject destination, or strip value
+  are rejected
 
 Example:
 
 ```python
 applyPatch(
-    "--- a/file.txt\n+++ b/file.txt\n@@\n-old\n+new\n"
+    file="src/example.py",
+    pnum=2,
+    diff="--- a/src/example.py\n+++ b/src/example.py\n@@ -1 +1 @@\n-old\n+new\n",
 )
 ```
 
-The function blocks dangerous path-changing patch flags and rejects absolute paths.
+The explicit `file` is authoritative; filenames embedded in the diff are not
+used to choose a target. Absolute paths and parent traversal are rejected, and
+the resolved target must remain within the configured current directory.
 
 ### 7. `fetch(url, prettify=False)`
 

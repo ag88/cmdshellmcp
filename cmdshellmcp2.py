@@ -398,64 +398,100 @@ def editFile(file: str, script: str, args: Optional[list[str]] = None) -> str:
     return response
 
 
-def applyPatch(text: str, args: Optional[list[str]] = None, context: int = 2) -> str:
-    """Apply context/unified diff text using patch; args are passed to patch.
+def _apply_patch_args_error(args: list[str]) -> Optional[str]:
+    """Allow only patch switches that cannot select files or change locations."""
+    value_free_args = {
+        "-f", "--force",
+        "-l", "--ignore-whitespace",
+        "-N", "--forward",
+        "--no-backup-if-mismatch",
+        "--posix",
+        "-R", "--reverse",
+        "-s", "--quiet", "--silent",
+        "-t", "--batch",
+        "--verbose",
+    }
+    # Options with values can be represented in several ambiguous forms, so the
+    # allowlist deliberately contains only value-free behavior switches.
+    for arg in args:
+        if arg not in value_free_args:
+            return f"Error: patch argument is not allowed: {arg!r}"
+    return None
 
-    ``context`` sets patch's maximum fuzz (the number of context lines patch may
-    ignore) and defaults to 2, matching diffs conventionally made with ``diff -C 2``.
+
+def applyPatch(
+    file: str,
+    diff: str,
+    pnum: int = 2,
+    args: Optional[list[str]] = None,
+) -> str:
+    """Apply ``diff`` from stdin to one explicit local file using GNU patch.
+
+    ``pnum`` is GNU patch's ``-pNUM`` value.  The target must be an existing
+    regular file beneath the configured current directory.  Additional options
+    are restricted to a small allowlist that cannot select input/output files,
+    another target, a directory, or a different strip value.
     """
-    if cwd is None:
-        error = "Error: the current directory is not set; report it to the user"
-        audit.error("applyPatch: %s", error)
+    error = _local_path_error(file) if isinstance(file, str) else "Error: filename must be a string"
+    if error:
+        audit.error("applyPatch %r: %s", file, error)
         return error
-    if not isinstance(context, int) or isinstance(context, bool) or context < 0:
-        return "Error: context must be a non-negative integer"
+    if not isinstance(diff, str):
+        error = "Error: diff must be a string"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
+    if not isinstance(pnum, int) or isinstance(pnum, bool) or pnum < 0:
+        error = "Error: pnum must be a non-negative integer"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
     if args is None:
         args = []
-    for line in text.splitlines():
-        if line.startswith(("*** ", "--- ", "+++ ")):
-            patch_name = line[4:].split("\t", 1)[0].strip()
-            if patch_name in ("/dev/null", "dev/null"):
-                continue
-            # Context diff timestamps may be separated from the name by spaces.
-            patch_name = patch_name.split("  ", 1)[0]
-            if Path(patch_name).is_absolute():
-                error = "Error: absolute paths not allowed for patching"
-                audit.error("applyPatch: %s", error)
-                return error
-            if ".." in Path(patch_name).parts:
-                error = "Error: relative paths should be current directory and below"
-                audit.error("applyPatch: %s", error)
-                return error
-    # Options that select another directory or external input/output can escape cwd.
-    unsafe = ("-d", "--directory", "-i", "--input", "-o", "--output", "-r", "--reject-file")
-    has_unsafe_arg = any(
-        arg in unsafe
-        or any(arg.startswith(prefix + "=") for prefix in unsafe if prefix.startswith("--"))
-        for arg in args
-    )
-    if has_unsafe_arg:
-        error = "Error: patch path-changing and file input/output options are not allowed"
-        audit.error("applyPatch: %s", error)
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        error = "Error: args must be a list of strings"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
+    error = _apply_patch_args_error(args)
+    if error:
+        audit.error("applyPatch %r: %s", file, error)
         return error
 
-    command = ["patch", "--batch", "--fuzz", str(context), *args]
+    target = cwd / file
+    try:
+        target.resolve(strict=True).relative_to(cwd.resolve(strict=True))
+    except FileNotFoundError:
+        error = f"Error: target file does not exist: {file}"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
+    except (OSError, RuntimeError, ValueError):
+        error = f"Error: target file must be beneath the current directory: {file}"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
+    if target.is_symlink() or not target.is_file():
+        error = f"Error: target is not a regular file: {file}"
+        audit.error("applyPatch %r: %s", file, error)
+        return error
+
+    command = ["patch", "--verbose", f"-p{pnum}", *args, "--", file]
     audit.info("applyPatch: %s", shlex.join(command))
     try:
         result = subprocess.run(
-            command, input=text, capture_output=True, text=True, cwd=cwd, timeout=100
+            command, input=diff, capture_output=True, text=True, cwd=cwd, timeout=100
         )
-        output = result.stdout + result.stderr
-        if result.returncode != 0:
-            audit.error("applyPatch failed (%s): %s", result.returncode, output.rstrip())
-            return f"Error applying patch: {output.strip()}"
-        return output or "Success: patch applied"
     except subprocess.TimeoutExpired:
-        audit.error("applyPatch timed out")
-        return "Error: Patch execution timed out."
-    except Exception as exc:
-        audit.exception("applyPatch execution failed")
-        return f"Error applying patch: {exc}"
+        audit.error("applyPatch timed out: %s", file)
+        return "Error: patch execution timed out"
+    except OSError as exc:
+        audit.error("applyPatch could not execute patch for %s: %s", file, exc)
+        return f"Error: could not execute patch: {exc}"
+
+    if result.returncode != 0:
+        details = "\n".join(part.strip() for part in (result.stderr, result.stdout) if part.strip())
+        audit.error("applyPatch failed (%s): %s", result.returncode, details)
+        suffix = f": {details}" if details else ""
+        return f"Error: patch failed with exit status {result.returncode}{suffix}"
+
+    audit.info("applyPatch completed: %s", file)
+    return result.stdout or "Success: patch applied"
 
 
 def fetch(url: str, prettify: bool = False) -> str:
