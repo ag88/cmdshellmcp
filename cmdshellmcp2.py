@@ -474,6 +474,8 @@ def applyPatch(
     command = ["patch", "--verbose", f"-p{pnum}", *args, "--", file]
     audit.info("applyPatch: %s", shlex.join(command))
     try:
+        if not diff.endswith('\n'):
+            diff = diff + '\n'
         result = subprocess.run(
             command, input=diff, capture_output=True, text=True, cwd=cwd, timeout=100
         )
