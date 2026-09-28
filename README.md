@@ -247,6 +247,14 @@ Security features include:
 - Command names are checked before execution
 - The `cmdshell` tool expects a command name and argument array, not a raw shell string
 - Piping is not supported by design
+- For various tools, the MCP server do validate paths to prevent access or writing outside its given work directory
+  [https://github.com/ag88/cmdshellmcp/blob/main/cmdshellmcp2.py#L153](https://github.com/ag88/cmdshellmcp/blob/902f4029bdbee4c81585649e3cbf9d7385bdf6a0/cmdshellmcp2.py#L153).  
+  However, that for running actual `allow_listed` Unix / Linux commands, this check is not performed for the arguments.
+  This is because there are situations where it is necessary to access shared resources e.g. a file/resource in say `/usr/share`,
+  `/usr/include` etc. Narrow restrictions so would mean verbose per command + arguments specific allow list configs
+  which would be a big very detailed list, difficult to (manually) maintain and possibly run slow as it needs to perform the check each time.
+  Hence, one should carefully consider the Unix/Linux commands `allow_list` specific to one's context / usage / intent, while configuring
+  them e.g. in `cmdshellmcp.json`
 - File tools reject absolute paths and paths containing `..`
 - Writes are limited to locations beneath the configured `cwd`
 - `editFile` accepts only a small allowlist of non-file-selecting `sed` options,
