@@ -4,6 +4,8 @@
 
 The server is implemented in Python and runs as an MCP server using the `fastmcp` package. By default it listens on `127.0.0.1:8003` using the streamable HTTP transport unless `--sse` is selected.
 
+Added setup files for a full featured Docker Debian based sandbox system container with `cmdshellmcp` (setup scripts, guides [DOCKER.md](DOCKER.md), Dockerfile, `cmdshellmcp.service` unit file that runs `cmdshellmcp` in the container).
+
 ## [!CAUTION]
 **This server provides remote command execution (RCE), which is normally considered a critical security vulnerability.** Allow-listing powerful commands—such as `bash`, `sh`, `python`, `perl`, `sudo`, `docker`, or commands capable of writing files—may allow an attacker or untrusted LLM to bypass intended restrictions and take control of the system. For example, allowing `python` or `bash` can effectively permit arbitrary code execution and file access. If the server lacks strong authentication, is reachable by untrusted clients, or is controlled by an untrusted or prompt-injected LLM, it may cause severe damage, including data loss, credential theft, malware installation, or compromise of other systems. Run `cmdshellmcp` \(`cmdshellmcp2.py`\)  only in a protected, disposable sandbox with carefully scoped privileges limited to those required for its intended task and limited access to files, credentials, devices, and networks—for example, an ephemeral Docker container or virtual machine that can be safely destroyed after use.
 
@@ -39,6 +41,7 @@ executing shell commands.
 - Bearer token authentication with a secure, randomly generated token by default
 - Audit logging to stdout and/or a file
 - Path restrictions to prevent escaping the current working directory
+- Setup files for a full featured Docker Debian based sandbox system container with `cmdshellmcp` (setup scripts, guides [DOCKER.md](DOCKER.md), Dockerfile, `cmdshellmcp.service` unit file that runs `cmdshellmcp` in the container).
 
 ## AI use in this repo
 
@@ -189,6 +192,18 @@ python cmdshellmcp2.py --quiet --auditlog /tmp/cmdshellmcp.log
 
 - `--quiet` disables audit logging to stdout.
 - `--auditlog` appends audit events to the specified file.
+
+## A full featured Docker Debian based sandbox system container with cmdshellmcp
+
+This project provides setup files for a delightful, full featured Docker Debian based sandbox system container with `cmdshellmcp` (setup scripts, guides [DOCKER.md](DOCKER.md), Dockerfile, `cmdshellmcp.service` unit file that runs `cmdshellmcp` in the container).
+
+Using the docker sandbox container gives you a "system in a system" experience, e.g. that Debian boots up within the container just like a full Unix / Linux system. It gives you 3 userids within the container:
+
+* `root`: (superuser)
+* `admin` (this is for you / human user), `admin` has `sudo` access, i.e. practically can do anything `root` does, install files, change system configs, permissions etc
+* `codeagent`: `cmdshellmcp` runs under this user, in the user's `/home/codeagent` home directory. `codeagent` has no sudo access.
+
+For more details review [DOCKER.md](DOCKER.md)
 
 ## Command-line options
 
