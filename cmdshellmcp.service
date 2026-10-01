@@ -1,0 +1,22 @@
+[Unit]
+Description=cmdshellmcp command-shell MCP server
+After=network.target
+ConditionPathExists=/var/lib/container-setup/complete
+
+[Service]
+Type=simple
+User=codeagent
+Group=codeagent
+WorkingDirectory=/home/codeagent
+Environment=HOME=/home/codeagent
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/python/cmdshellmcp/venv/bin/python /usr/local/python/cmdshellmcp/cmdshellmcp2.py --conf /usr/local/python/cmdshellmcp/cmdshellmcp.json --cwd /home/codeagent --host 0.0.0.0
+UMask=0027
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

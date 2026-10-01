@@ -1,0 +1,128 @@
+# syntax=docker/dockerfile:1
+FROM debian:13
+
+ENV container=docker
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        systemd \
+        systemd-sysv \
+        dbus \
+        adduser \
+        passwd \
+        sudo \
+        patch \
+        diffutils \
+        file \
+        jq \
+        ca-certificates \
+        curl \
+        iproute2 \
+        iputils-ping \
+        procps \
+        nano \
+        python3 \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && systemctl set-default multi-user.target \
+    && systemctl mask \
+        systemd-networkd.service \
+        systemd-networkd.socket \
+        systemd-networkd-wait-online.service \
+        systemd-resolved.service \
+    && rm -f /etc/machine-id \
+    && touch /etc/machine-id
+
+# Docker supplies the interface, addresses, routes and resolv.conf.
+# No DHCP client or container-side network manager is required.
+
+# Build from the local repository root; no repository is cloned during build.
+COPY requirements.txt /usr/local/python/cmdshellmcp/requirements.txt
+RUN python3 -m venv /usr/local/python/cmdshellmcp/venv \
+    && /usr/local/python/cmdshellmcp/venv/bin/python -m pip install --no-cache-dir \
+        -r /usr/local/python/cmdshellmcp/requirements.txt
+COPY cmdshellmcp2.py cmdshellmcp.json /usr/local/python/cmdshellmcp/
+
+# Fixed service account. Password is set interactively on first start.
+RUN adduser --disabled-password --gecos "Code agent" codeagent \
+    && chmod 2750 /home/codeagent \
+    && chown -R root:root /usr/local/python/cmdshellmcp \
+    && chown root:codeagent /usr/local/python/cmdshellmcp/cmdshellmcp.json \
+    && chmod 0640 /usr/local/python/cmdshellmcp/cmdshellmcp.json \
+    && printf '%s\n' 'umask 0027' > /etc/profile.d/container-umask.sh
+
+COPY cmdshellmcp.service /etc/systemd/system/cmdshellmcp.service
+RUN systemctl enable cmdshellmcp.service
+
+COPY --chmod=0755 <<'SCRIPT' /usr/local/sbin/container-entrypoint
+#!/bin/sh
+set -eu
+setup_dir=/var/lib/container-setup
+marker=$setup_dir/complete
+
+if [ ! -f "$marker" ]; then
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        echo "First start requires docker run -it (or docker start -ai)." >&2
+        exit 1
+    fi
+    install -d -m 0700 "$setup_dir"
+
+    echo "Set the root password:"
+    passwd root
+
+    # Retain the selected account so an interrupted setup can be resumed.
+    if [ -f "$setup_dir/admin-username" ]; then
+        admin_user=$(cat "$setup_dir/admin-username")
+        echo "Resuming setup for human administrator: $admin_user"
+    else
+        echo "First user: you/human. Use this account to login and administer the container via sudo."
+        while :; do
+            printf "Human administrator username [admin]: "
+            read -r admin_user
+            admin_user=${admin_user:-admin}
+            case "$admin_user" in
+                root|codeagent|-*|*[!a-z0-9_-]*)
+                    echo "Choose a lowercase username other than root or codeagent."
+                    continue ;;
+            esac
+            if id "$admin_user" >/dev/null 2>&1; then
+                echo "That username already exists; choose another."
+                continue
+            fi
+            printf "Numeric UID for human administrator [automatic]: "
+            read -r admin_uid
+            if [ -n "$admin_uid" ]; then
+                if ! adduser --disabled-password --gecos "Human administrator" --uid "$admin_uid" "$admin_user"; then
+                    continue
+                fi
+            else
+                if ! adduser --disabled-password --gecos "Human administrator" "$admin_user"; then
+                    continue
+                fi
+            fi
+            printf '%s\n' "$admin_user" > "$setup_dir/admin-username"
+            break
+        done
+    fi
+
+    echo "Set the password for $admin_user (you/human; sudo administrator):"
+    passwd "$admin_user"
+    usermod -aG sudo,codeagent "$admin_user"
+
+    echo "Second user: codeagent. This account runs the MCP server and has no sudo access."
+    echo "Set the codeagent login password:"
+    passwd codeagent
+
+    touch "$marker"
+    echo "Setup complete. Starting systemd and cmdshellmcp.service."
+fi
+
+# Replace the entrypoint so systemd becomes PID 1.
+exec "$@"
+SCRIPT
+
+# Must match the port in your local cmdshellmcp.json; EXPOSE does not publish it.
+EXPOSE 8003
+STOPSIGNAL SIGRTMIN+3
+ENTRYPOINT ["/usr/local/sbin/container-entrypoint"]
+CMD ["/sbin/init"]
