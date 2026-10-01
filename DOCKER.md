@@ -2,6 +2,44 @@
 
 This example builds a Debian 13 container with systemd as PID 1, interactive user accounts, and `cmdshellmcp` running as a service under an ordinary user. Docker supplies native bridge networking and port publishing; no manually injected network interface or DHCP client is needed.
 
+## Prerequisite: install Docker Engine on an Ubuntu host
+
+The examples in this guide require a Linux host with Docker Engine and the Docker CLI. On a supported 64-bit Ubuntu release, install the current stable Docker Engine from Docker's official `apt` repository with the following commands. Run them in a terminal from an account with `sudo` access:
+
+```bash
+# Add Docker's official signing key.
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the Docker repository for this Ubuntu release and architecture.
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+# Install Docker Engine, the CLI, containerd, Buildx, and Compose.
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+```
+
+Confirm that the daemon is running and launch Docker's test container:
+
+```bash
+sudo systemctl status docker --no-pager
+sudo docker run --rm hello-world
+```
+
+These commands intentionally use `sudo docker`. If you later configure Docker for use without `sudo`, understand that membership in the `docker` group grants root-level privileges. For other Ubuntu versions, upgrades, conflicting packages, rootless operation, or troubleshooting, follow Docker's maintained [Ubuntu installation guide](https://docs.docker.com/engine/install/ubuntu/) and [Linux post-installation guide](https://docs.docker.com/engine/install/linux-postinstall/).
+
 Use a Linux Docker Engine host with the systemd/cgroup support required by `1stRun.sh`. The supplied run script uses `--privileged`, the host cgroup namespace, and a writable host cgroup mount. These permissions substantially weaken host isolation: use a disposable host or VM when handling untrusted agent activity. The human administrator's sudo password controls sudo access, but does not make this privileged container a strong security boundary. Do not mount the Docker socket or sensitive host directories into the sandbox.
 
 ## 1. Prepare the local build files
@@ -446,6 +484,8 @@ Check the JSON, installed dependencies, working-directory permissions, server bi
 ## References
 
 - [cmdshellmcp project](https://github.com/ag88/cmdshellmcp)
+- [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+- [Linux post-installation steps for Docker Engine](https://docs.docker.com/engine/install/linux-postinstall/)
 - [Docker attach](https://docs.docker.com/reference/cli/docker/container/attach/)
 - [Docker exec](https://docs.docker.com/reference/cli/docker/container/exec/)
 - [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
