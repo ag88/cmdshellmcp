@@ -41,7 +41,7 @@ executing shell commands.
 - Bearer token authentication with a secure, randomly generated token by default
 - Audit logging to stdout and/or a file
 - Path restrictions to prevent escaping the current working directory
-- Setup files for a full featured Docker Debian based sandbox system container with `cmdshellmcp` (setup scripts, guides [DOCKER.md](DOCKER.md), Dockerfile, `cmdshellmcp.service` unit file that runs `cmdshellmcp` in the container).
+- Setup files for a delightful, full featured Docker Debian based sandbox system container with `cmdshellmcp` (setup scripts, guides [DOCKER.md](DOCKER.md), Dockerfile, `cmdshellmcp.service` unit file that runs `cmdshellmcp` in the container).
 
 ## AI use in this repo
 
