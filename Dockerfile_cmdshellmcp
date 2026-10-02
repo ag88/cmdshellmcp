@@ -23,6 +23,7 @@ RUN apt-get update \
         nano \
         python3 \
         python3-venv \
+        git \
     && rm -rf /var/lib/apt/lists/* \
     && systemctl set-default multi-user.target \
     && systemctl mask \
