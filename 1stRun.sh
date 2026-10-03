@@ -7,7 +7,7 @@ CONTAINER_NAME="cmdshellmcp"
 #    --publish 8003:8003 \
 docker run -it \
     --name $CONTAINER_NAME \
-    --hostname codeagent \
+    --hostname cmdshellmcp \
     --privileged \
     --cgroupns=host \
     --tmpfs /run \
