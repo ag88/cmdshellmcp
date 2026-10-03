@@ -114,7 +114,7 @@ If you change `IMAGE_NAME` in `dockerBuild.sh`, make the corresponding change in
 
 ## 5. Review the first-run script and port mapping
 
-Review `1stRun.sh` before creating the container. It names the container `cmdshellmcp`, sets its hostname to `codeagent`, and currently publishes:
+Review `1stRun.sh` before creating the container. It names the container `cmdshellmcp`, sets its hostname to `cmdshellmcp`, and currently publishes:
 
 ```bash
 --publish 8003:8003 \
