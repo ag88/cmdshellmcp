@@ -523,7 +523,7 @@ Args:
     command: The command name (for example, {example_command!r}). It must be in the allowed commands list.
     args: A list of command arguments/flags (for example, ['-la', '*.txt']).
           Put a glob in double quotes (for example, ['\"*.txt\"']) to pass it
-          literally instead of expanding it into filenames. Pipes are not allowed.
+          literally instead of expanding it into filenames. Pipes and redirects are not allowed.
 """
 
 
