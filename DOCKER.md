@@ -52,7 +52,7 @@ cmdshellmcp.service
 cmdshellmcp2.py
 cmdshellmcp.json
 requirements.txt
-dockerBuild.sh
+0dockerBuild.sh
 1stRun.sh
 ```
 
@@ -101,7 +101,7 @@ Both files can also be edited later inside the container; see the maintenance ac
 **Host**, from the repository root:
 
 ```bash
-bash dockerBuild.sh
+bash 0dockerBuild.sh
 ```
 
 The supplied script builds `Dockerfile_cmdshellmcp` and tags the image as `cmdshellmcp-image`. Its equivalent Docker command is:
@@ -110,7 +110,7 @@ The supplied script builds `Dockerfile_cmdshellmcp` and tags the image as `cmdsh
 docker build -f Dockerfile_cmdshellmcp -t cmdshellmcp-image .
 ```
 
-If you change `IMAGE_NAME` in `dockerBuild.sh`, make the corresponding change in `1stRun.sh`.
+If you change `IMAGE_NAME` in `0dockerBuild.sh`, make the corresponding change in `1stRun.sh`.
 
 ## 5. Review the first-run script and port mapping
 
@@ -458,7 +458,7 @@ This deletes the container's writable layer, including account setup and files s
 docker image rm cmdshellmcp-image
 ```
 
-Docker may refuse removal while containers still reference the image. Rebuild with `bash dockerBuild.sh` when needed.
+Docker may refuse removal while containers still reference the image. Rebuild with `bash 0dockerBuild.sh` when needed.
 
 ## Troubleshoot startup
 
