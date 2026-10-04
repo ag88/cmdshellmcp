@@ -306,6 +306,7 @@ Notes:
 - Arguments are passed as a list, reducing shell injection risk.
 - Glob patterns may be expanded automatically.
 - Quoted globs can be passed literally to prevent expansion.
+- Pipes and redirects are not allowed
 
 ### 2. `writeFile(file, text, append=False, newline=True)`
 
