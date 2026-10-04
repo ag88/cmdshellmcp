@@ -210,7 +210,7 @@ For more details review [DOCKER.md](DOCKER.md)
 ```bash
 python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
   [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN | --noauth] \
-  [--disableTools TOOL[,TOOL...]] [--editdelbk] [--sse] [--quiet] \
+  [--disableTools TOOL[,TOOL...]] [--editdelbk] [--shellnopathchk] [--sse] [--quiet] \
   [--auditlog FILE]
 ```
 
@@ -225,6 +225,8 @@ Options:
   `disableTools` list from the config file; case sensitive and exact name match is required
 - `--editdelbk`: delete the numbered backup after `editFile` has completed
   successfully and composed its unified diff response
+- `--shellnopathchk`: bypass `_local_path_error` checks on `cmdshell` arguments
+  for this server process; file tools continue to check their paths
 - `--conf`: JSON config file path; when omitted, defaults to
   `cmdshellmcp.json` in the current directory
 - `--auth`: use a fixed bearer token instead of generating one
@@ -262,16 +264,18 @@ Security features include:
 - Command names are checked before execution
 - The `cmdshell` tool expects a command name and argument array, not a raw shell string
 - Piping is not supported by design
-- For various tools, the MCP server do validate paths to prevent access or writing outside its given work directory
-  [https://github.com/ag88/cmdshellmcp/blob/main/cmdshellmcp2.py#L153](https://github.com/ag88/cmdshellmcp/blob/902f4029bdbee4c81585649e3cbf9d7385bdf6a0/cmdshellmcp2.py#L153).  
-  However, that for running actual `allow_listed` Unix / Linux commands, this check is not performed for the arguments.
-  This is because there are situations where it is necessary to access shared resources e.g. a file/resource in say `/usr/share`,
-  `/usr/include` etc. Narrow restrictions so would mean verbose per command + arguments specific allow list configs
-  which would be a big very detailed list, difficult to (manually) maintain and possibly run slow as it needs to perform the check each time.
-  Hence, one should carefully consider the Unix/Linux commands `allow_list` specific to one's context / usage / intent, while configuring
-  them e.g. in `cmdshellmcp.json`
+- `cmdshell` checks every argument with `_local_path_error` after escape decoding
+  and removal of surrounding double quotes, before expanding globs. Expanded
+  filenames are also checked before execution. Empty arguments, absolute paths,
+  and paths containing a `..` component are rejected by default.
+- Start the server with `--shellnopathchk` when shell commands need access to
+  shared resources such as `/usr/share` or `/usr/include`. This bypass applies
+  only to `cmdshell`; the command allowlist remains enforced.
 - File tools perform basic `_local_path_error` checks intended to keep file paths within `--cwd`: absolute paths and paths containing `..` are rejected
-- These are basic path checks rather than a complete filesystem sandbox; allowlisted shell-command arguments are not subject to these file-tool checks
+- These are basic lexical path checks rather than a complete filesystem sandbox.
+  They do not resolve symlinks or interpret command-specific options such as
+  `--file=/absolute/path`, scripts, or expressions. Choose the command allowlist
+  carefully for your intended usage.
 - `editFile` accepts only a small allowlist of non-file-selecting `sed` options,
   runs GNU `sed` in sandbox mode, and does not invoke a shell
 - `editFile` writes successful output to a temporary file before atomically
@@ -304,9 +308,20 @@ Notes:
 
 - The command name must be in the allowlist.
 - Arguments are passed as a list, reducing shell injection risk.
-- Glob patterns may be expanded automatically.
+- Arguments are checked with `_local_path_error` by default, including decoded
+  arguments and expanded glob matches. This also checks arguments used as flags
+  or text; empty arguments, absolute paths, and `..` path components are rejected.
+- Glob patterns may be expanded automatically relative to `--cwd`.
 - Quoted globs can be passed literally to prevent expansion.
 - Pipes and redirects are not allowed
+- To bypass only the shell argument path checks, start the server with:
+
+  ```bash
+  python cmdshellmcp2.py --cwd /path/to/project --shellnopathchk
+  ```
+
+  The MCP tool's parameters remain `command` and `args`; the bypass is configured
+  at server startup, and file tools still enforce their path checks.
 
 ### 2. `writeFile(file, text, append=False, newline=True)`
 

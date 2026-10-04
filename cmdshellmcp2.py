@@ -88,6 +88,9 @@ ALLOWED_COMMANDS = DEFAULT_ALLOWED_COMMANDS.copy()
 # Set from --editdelbk before tools are registered.
 EDIT_DELETE_BACKUP = False
 
+# Set from --shellnopathchk before tools are registered.
+SHELL_NO_PATH_CHECK = False
+
 
 def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
     command = command.strip()
@@ -107,13 +110,20 @@ def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
     for arg in args:
         # Check for common glob characters
         arg = arg.encode().decode('unicode_escape')
-        if arg.startswith('"') and arg.endswith('"'):
+        quoted = arg.startswith('"') and arg.endswith('"')
+        if quoted:
             arg = arg[1:-1] 
+        if not SHELL_NO_PATH_CHECK:
+            error = _local_path_error(arg)
+            if error:
+                audit.error("cmdshell argument %r: %s", arg, error)
+                return error
+        if quoted:
             expanded_args.append(arg)
         else: 
             if any(char in arg for char in ('*', '?', '[', ']')):
                 try:
-                    matches = glob.glob(arg)
+                    matches = glob.glob(arg, root_dir=cwd)
                     if matches:
                         # Expand to all matching files/directories
                         expanded_args.extend(matches)
@@ -125,6 +135,13 @@ def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
                     expanded_args.append(arg)
             else:
                 expanded_args.append(arg)
+
+    if not SHELL_NO_PATH_CHECK:
+        for arg in expanded_args:
+            error = _local_path_error(arg)
+            if error:
+                audit.error("cmdshell expanded argument %r: %s", arg, error)
+                return error
 
     try:
         # Construct command safely as a list to prevent shell injection
@@ -577,9 +594,16 @@ def cmdshell_description(allowed_commands: list[str]) -> str:
     """Build the description advertised to MCP clients for the shell tool."""
     allowed = json.dumps(allowed_commands)
     example_command = allowed_commands[0]
+    path_policy = (
+        "Argument path checks are disabled by --shellnopathchk."
+        if SHELL_NO_PATH_CHECK
+        else "Arguments are checked with _local_path_error: empty arguments, absolute paths, "
+             "and paths containing a '..' component are rejected."
+    )
     return f"""Runs one of the configured Linux/Unix commands.
 
 Allowed commands: {allowed}
+{path_policy}
 
 Args:
     command: The command name (for example, {example_command!r}). It must be in the allowed commands list.
@@ -864,6 +888,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--sse", action='store_true', help="use sse transport")
     parser.add_argument(
+        "--shellnopathchk",
+        action="store_true",
+        help="bypass cmdshell argument path checks (file tools still check paths)",
+    )
+    parser.add_argument(
         "--editdelbk",
         action="store_true",
         help="delete editFile's numbered backup after composing a successful diff response",
@@ -875,6 +904,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     EDIT_DELETE_BACKUP = args.editdelbk
+    SHELL_NO_PATH_CHECK = args.shellnopathchk
 
     config = load_config(parser, args.conf)
 
