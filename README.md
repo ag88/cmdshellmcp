@@ -34,7 +34,7 @@ executing shell commands.
 ## Features
 
 - Allowlisted shell execution for a curated set of commands
-- File read/write/list operations under a configured working directory
+- File read/write/list/copy/move/rename/delete operations under a configured working directory
 - Transactional text-file editing with `sed`, numbered backups, and unified diffs
 - Unified diff patch application via `patch`
 - HTTP fetch support with optional HTML prettification
@@ -89,7 +89,7 @@ Example:
   "port": 8003,
   "quiet": false,
   "auditlog": null,
-  "disableTools": ["writeFile", "editFile", "applyPatch"],
+  "disableTools": ["writeFile", "editFile", "applyPatch", "copyFile", "moveRenameFile", "deleteFile"],
   "allowed_commands": [
     "ls", "pwd", "date", "cat", "grep", "egrep",
     "whoami", "head", "tail", "sed", "wc", "file", "du", "df",
@@ -270,8 +270,8 @@ Security features include:
   which would be a big very detailed list, difficult to (manually) maintain and possibly run slow as it needs to perform the check each time.
   Hence, one should carefully consider the Unix/Linux commands `allow_list` specific to one's context / usage / intent, while configuring
   them e.g. in `cmdshellmcp.json`
-- File tools reject absolute paths and paths containing `..`
-- Writes are limited to locations beneath the configured `cwd`
+- File tools perform basic `_local_path_error` checks intended to keep file paths within `--cwd`: absolute paths and paths containing `..` are rejected
+- These are basic path checks rather than a complete filesystem sandbox; allowlisted shell-command arguments are not subject to these file-tool checks
 - `editFile` accepts only a small allowlist of non-file-selecting `sed` options,
   runs GNU `sed` in sandbox mode, and does not invoke a shell
 - `editFile` writes successful output to a temporary file before atomically
@@ -349,7 +349,41 @@ listFiles("src")
 
 Returns a newline-separated list of entries, with `/` appended for directories.
 
-### 5. `editFile(file, script, args=None)`
+### 5. \`copyFile(source, destination)\`
+
+Copies a regular file beneath the configured working directory using Python's
+standard-library file operations. Both source and destination are checked with
+\`_local_path_error\`.
+
+Example:
+
+\`\`\`python
+copyFile("src/example.py", "src/example.py.copy")
+\`\`\`
+
+### 6. \`moveRenameFile(source, destination)\`
+
+Moves or renames a regular file using \`os.rename\`. Both source and destination
+are checked with \`_local_path_error\`.
+
+Example:
+
+\`\`\`python
+moveRenameFile("draft.txt", "archive/draft.txt")
+\`\`\`
+
+### 7. \`deleteFile(file)\`
+
+Deletes a regular file using \`os.remove\` after checking the path with
+\`_local_path_error\`.
+
+Example:
+
+\`\`\`python
+deleteFile("obsolete.txt")
+\`\`\`
+
+### 8. `editFile(file, script, args=None)`
 
 Edits an existing text file beneath the configured working directory using GNU
 `sed`. The dedicated `script` parameter is the only source of the editing
@@ -405,7 +439,7 @@ and reports that the edit completed but the backup remains.
 > successful edits. Protect and remove them according to the same retention
 > policy as the source file.
 
-### 6. `applyPatch(file, diff, pnum=2, args=None)`
+### 9. `applyPatch(file, diff, pnum=2, args=None)`
 
 Applies a diff to one explicitly named file using GNU `patch`. The diff is
 normally a unified diff and is passed directly to `patch` over standard input.
@@ -434,7 +468,7 @@ The explicit `file` is authoritative; filenames embedded in the diff are not
 used to choose a target. Absolute paths and parent traversal are rejected, and
 the resolved target must remain within the configured current directory.
 
-### 7. `fetch(url, prettify=False)`
+### 10. `fetch(url, prettify=False)`
 
 Fetches a URL using `requests`. If `prettify` is `true`, it parses the HTML with BeautifulSoup and pretty-prints it.
 
