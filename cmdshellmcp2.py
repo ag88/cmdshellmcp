@@ -232,6 +232,68 @@ def listFiles(path: str = ".") -> str:
         return f"Error listing files {path}: {exc}"
 
 
+
+def copyFile(source: str, destination: str) -> str:
+    """Copy a local file beneath the configured current directory."""
+    for label, file in (("source", source), ("destination", destination)):
+        error = _local_path_error(file)
+        if error:
+            audit.error("copyFile %s %r: %s", label, file, error)
+            return error
+
+    source_path = cwd / source
+    destination_path = cwd / destination
+    audit.info("copyFile: %s -> %s", source, destination)
+    try:
+        if not source_path.is_file():
+            return f"Error: source is not a regular file: {source}"
+        shutil.copy2(source_path, destination_path)
+        return f"Success: copied {source} to {destination}"
+    except Exception as exc:
+        audit.error("copyFile failed %s -> %s: %s", source, destination, exc)
+        return f"Error copying file {source} to {destination}: {exc}"
+
+
+def moveRenameFile(source: str, destination: str) -> str:
+    """Move or rename a local file beneath the configured current directory."""
+    for label, file in (("source", source), ("destination", destination)):
+        error = _local_path_error(file)
+        if error:
+            audit.error("moveRenameFile %s %r: %s", label, file, error)
+            return error
+
+    source_path = cwd / source
+    destination_path = cwd / destination
+    audit.info("moveRenameFile: %s -> %s", source, destination)
+    try:
+        if not source_path.is_file():
+            return f"Error: source is not a regular file: {source}"
+        os.rename(source_path, destination_path)
+        return f"Success: moved/renamed {source} to {destination}"
+    except Exception as exc:
+        audit.error("moveRenameFile failed %s -> %s: %s", source, destination, exc)
+        return f"Error moving/renaming file {source} to {destination}: {exc}"
+
+
+def deleteFile(file: str) -> str:
+    """Delete a local file beneath the configured current directory."""
+    error = _local_path_error(file)
+    if error:
+        audit.error("deleteFile %r: %s", file, error)
+        return error
+
+    file_path = cwd / file
+    audit.info("deleteFile: %s", file)
+    try:
+        if not file_path.is_file():
+            return f"Error: path is not a regular file: {file}"
+        os.remove(file_path)
+        return f"Success: deleted {file}"
+    except Exception as exc:
+        audit.error("deleteFile failed for %s: %s", file, exc)
+        return f"Error deleting file {file}: {exc}"
+
+
 def _edit_file_args_error(args: list[str]) -> Optional[str]:
     """Reject sed arguments that can supply programs or select other files."""
     safe_long_options = {"--quiet", "--silent", "--regexp-extended", "--posix"}
@@ -580,6 +642,9 @@ def create_server(
         ("writeFile", writeFile, None),
         ("readFile", readFile, None),
         ("listFiles", listFiles, None),
+        ("copyFile", copyFile, None),
+        ("moveRenameFile", moveRenameFile, None),
+        ("deleteFile", deleteFile, None),
         ("editFile", editFile, editFile_description()),
         ("applyPatch", applyPatch, None),
         ("fetch", fetch, None),
