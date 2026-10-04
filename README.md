@@ -349,39 +349,39 @@ listFiles("src")
 
 Returns a newline-separated list of entries, with `/` appended for directories.
 
-### 5. \`copyFile(source, destination)\`
+### 5. copyFile(source, destination)
 
 Copies a regular file beneath the configured working directory using Python's
 standard-library file operations. Both source and destination are checked with
-\`_local_path_error\`.
+`_local_path_error`.
 
 Example:
 
-\`\`\`python
+```python
 copyFile("src/example.py", "src/example.py.copy")
-\`\`\`
+```
 
-### 6. \`moveRenameFile(source, destination)\`
+### 6. moveRenameFile(source, destination)
 
-Moves or renames a regular file using \`os.rename\`. Both source and destination
-are checked with \`_local_path_error\`.
+Moves or renames a regular file using `os.rename`. Both source and destination
+are checked with `_local_path_error`.
 
 Example:
 
-\`\`\`python
+```python
 moveRenameFile("draft.txt", "archive/draft.txt")
-\`\`\`
+```
 
-### 7. \`deleteFile(file)\`
+### 7. `deleteFile(file)`
 
-Deletes a regular file using \`os.remove\` after checking the path with
-\`_local_path_error\`.
+Deletes a regular file using `os.remove` after checking the path with
+`_local_path_error`.
 
 Example:
 
-\`\`\`python
+```python
 deleteFile("obsolete.txt")
-\`\`\`
+```
 
 ### 8. `editFile(file, script, args=None)`
 
