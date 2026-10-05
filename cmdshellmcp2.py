@@ -174,7 +174,7 @@ def _local_path_error(file: str) -> Optional[str]:
     if not file:
         return "Error: filename is required"
     if file.startswith("/") or Path(file).is_absolute():
-        return "Error: absolute paths not allowed for writing"
+        return "Error: absolute paths not allowed"
     if ".." in Path(file).parts:
         return "Error: relative paths should be current directory and below"
     return None
