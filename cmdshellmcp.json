@@ -9,7 +9,9 @@
     "applyPatch",
     "copyFile",
     "moveRenameFile",
-    "deleteFile"
+    "deleteFile",
+    "mkdir",
+    "rmdir"
   ],
   "allowed_commands": [
     "ls",
