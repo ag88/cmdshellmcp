@@ -365,7 +365,7 @@ listFiles("src")
 
 Returns a newline-separated list of entries, with `/` appended for directories.
 
-### 5. copyFile(source, destination)
+### 5. `copyFile(source, destination)`
 
 Copies a regular file beneath the configured working directory using Python's
 standard-library file operations. Both source and destination are checked with
@@ -377,7 +377,7 @@ Example:
 copyFile("src/example.py", "src/example.py.copy")
 ```
 
-### 6. moveRenameFile(source, destination)
+### 6. `moveRenameFile(source, destination)`
 
 Moves or renames a regular file using `os.rename`. Both source and destination
 are checked with `_local_path_error`.
@@ -399,29 +399,29 @@ Example:
 deleteFile("obsolete.txt")
 ```
 
-### 8. \`mkdir(path)\`
+### 8. `mkdir(path)`
 
-Creates one directory using \`os.mkdir\` after checking the path with
-\`_local_path_error\`.
+Creates one directory using `os.mkdir` after checking the path with
+`_local_path_error`.
 
 Example:
 
-\`\`\`python
+```python
 mkdir("build")
-\`\`\`
+```
 
 The parent directory must already exist.
 
-### 9. \`rmdir(path)\`
+### 9. `rmdir(path)`
 
-Removes one empty directory using \`os.rmdir\` after checking the path with
-\`_local_path_error\`.
+Removes one empty directory using `os.rmdir` after checking the path with
+`_local_path_error`.
 
 Example:
 
-\`\`\`python
+```python
 rmdir("build")
-\`\`\`
+```
 
 The directory must be empty; this tool does not recursively delete directory
 contents.
