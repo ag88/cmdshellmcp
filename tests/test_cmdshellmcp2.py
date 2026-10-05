@@ -7,6 +7,83 @@ from unittest import mock
 import cmdshellmcp2
 
 
+class CmdshellTests(unittest.TestCase):
+    def setUp(self):
+        temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary_directory.cleanup)
+        self.cwd_patch = mock.patch.object(cmdshellmcp2, "cwd", Path(temporary_directory.name))
+        self.cwd_patch.start()
+        self.addCleanup(self.cwd_patch.stop)
+        for name, value in (("ALLOWED_COMMANDS", ["echo"]), ("SHELL_NO_PATH_CHECK", False)):
+            patch = mock.patch.object(cmdshellmcp2, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+        patch = mock.patch.object(
+            cmdshellmcp2.subprocess, "run",
+            return_value=mock.Mock(returncode=0, stdout="done", stderr=""),
+        )
+        self.run = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_rejects_absolute_and_parent_paths_before_execution(self):
+        for argument in ("/tmp/file", "../file", "sub/../../file", "/tmp/*", "../*"):
+            with self.subTest(argument=argument):
+                with mock.patch.object(cmdshellmcp2.glob, "glob") as glob:
+                    response = cmdshellmcp2.cmdshell("echo", [argument])
+                self.assertTrue(response.startswith("Error:"), response)
+                glob.assert_not_called()
+                self.run.assert_not_called()
+
+    def test_checks_arguments_after_decoding_and_unquoting(self):
+        for argument in ('"/tmp/file"', '"../file"', r"\x2ftmp/file", r"\x2e\x2e/file", "", '""'):
+            with self.subTest(argument=argument):
+                response = cmdshellmcp2.cmdshell("echo", [argument])
+                self.assertTrue(response.startswith("Error:"), response)
+                self.run.assert_not_called()
+
+    def test_accepts_flags_text_and_local_paths(self):
+        args = ["-n", "hello", "sub/file", ".", "file..txt"]
+        self.assertEqual(cmdshellmcp2.cmdshell("echo", args), "done")
+        self.assertEqual(self.run.call_args.args[0], ["echo"] + args)
+
+    def test_accepts_omitted_arguments(self):
+        self.assertEqual(cmdshellmcp2.cmdshell("echo"), "done")
+        self.assertEqual(self.run.call_args.args[0], ["echo"])
+
+    def test_expands_globs_in_configured_working_directory(self):
+        (cmdshellmcp2.cwd / "example.txt").write_text("example")
+        self.assertEqual(cmdshellmcp2.cmdshell("echo", ["*.txt"]), "done")
+        self.assertEqual(self.run.call_args.args[0], ["echo", "example.txt"])
+        self.assertEqual(self.run.call_args.kwargs["cwd"], cmdshellmcp2.cwd)
+
+    def test_quoted_and_unmatched_globs_are_preserved(self):
+        (cmdshellmcp2.cwd / "example.txt").write_text("example")
+        self.assertEqual(cmdshellmcp2.cmdshell("echo", ['"*.txt"', "*.missing"]), "done")
+        self.assertEqual(self.run.call_args.args[0], ["echo", "*.txt", "*.missing"])
+
+    def test_rejects_unsafe_expanded_matches(self):
+        with mock.patch.object(cmdshellmcp2.glob, "glob", return_value=["../outside"]):
+            response = cmdshellmcp2.cmdshell("echo", ["*"])
+        self.assertTrue(response.startswith("Error:"), response)
+        self.run.assert_not_called()
+
+    def test_bypass_allows_paths_and_empty_arguments(self):
+        cmdshellmcp2.SHELL_NO_PATH_CHECK = True
+        self.assertEqual(cmdshellmcp2.cmdshell("echo", ['"/tmp/file"', "../file", ""]), "done")
+        self.assertEqual(self.run.call_args.args[0], ["echo", "/tmp/file", "../file", ""])
+
+    def test_bypass_keeps_allowlist_and_file_tool_checks(self):
+        cmdshellmcp2.SHELL_NO_PATH_CHECK = True
+        self.assertTrue(cmdshellmcp2.cmdshell("cat", ["/tmp/file"]).startswith("Access Denied:"))
+        self.assertTrue(cmdshellmcp2.writeFile("../file", "example").startswith("Error:"))
+        self.run.assert_not_called()
+
+    def test_description_reports_effective_path_policy(self):
+        self.assertIn("Arguments are checked", cmdshellmcp2.cmdshell_description(["echo"]))
+        cmdshellmcp2.SHELL_NO_PATH_CHECK = True
+        self.assertIn("disabled by --shellnopathchk", cmdshellmcp2.cmdshell_description(["echo"]))
+
+
 class EditFileTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
