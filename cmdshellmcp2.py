@@ -311,6 +311,43 @@ def deleteFile(file: str) -> str:
         return f"Error deleting file {file}: {exc}"
 
 
+
+def mkdir(path: str) -> str:
+    """Create one directory beneath the configured current directory."""
+    error = _local_path_error(path)
+    if error:
+        audit.error("mkdir %r: %s", path, error)
+        return error
+
+    directory = cwd / path
+    audit.info("mkdir: %s", path)
+    try:
+        os.mkdir(directory)
+        return f"Success: created directory {path}"
+    except Exception as exc:
+        audit.error("mkdir failed for %s: %s", path, exc)
+        return f"Error creating directory {path}: {exc}"
+
+
+def rmdir(path: str) -> str:
+    """Remove one empty directory beneath the configured current directory."""
+    error = _local_path_error(path)
+    if error:
+        audit.error("rmdir %r: %s", path, error)
+        return error
+
+    directory = cwd / path
+    audit.info("rmdir: %s", path)
+    try:
+        if not directory.is_dir():
+            return f"Error: path is not a directory: {path}"
+        os.rmdir(directory)
+        return f"Success: removed directory {path}"
+    except Exception as exc:
+        audit.error("rmdir failed for %s: %s", path, exc)
+        return f"Error removing directory {path}: {exc}"
+
+
 def _edit_file_args_error(args: list[str]) -> Optional[str]:
     """Reject sed arguments that can supply programs or select other files."""
     safe_long_options = {"--quiet", "--silent", "--regexp-extended", "--posix"}
@@ -669,6 +706,8 @@ def create_server(
         ("copyFile", copyFile, None),
         ("moveRenameFile", moveRenameFile, None),
         ("deleteFile", deleteFile, None),
+        ("mkdir", mkdir, None),
+        ("rmdir", rmdir, None),
         ("editFile", editFile, editFile_description()),
         ("applyPatch", applyPatch, None),
         ("fetch", fetch, None),
