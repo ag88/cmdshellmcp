@@ -34,7 +34,7 @@ executing shell commands.
 ## Features
 
 - Allowlisted shell execution for a curated set of commands
-- File read/write/list/copy/move/rename/delete operations under a configured working directory
+- File read/write/list/copy/move/rename/delete operations and basic directory creation/removal under a configured working directory
 - Transactional text-file editing with `sed`, numbered backups, and unified diffs
 - Unified diff patch application via `patch`
 - HTTP fetch support with optional HTML prettification
@@ -89,7 +89,7 @@ Example:
   "port": 8003,
   "quiet": false,
   "auditlog": null,
-  "disableTools": ["writeFile", "editFile", "applyPatch", "copyFile", "moveRenameFile", "deleteFile"],
+  "disableTools": ["writeFile", "editFile", "applyPatch", "copyFile", "moveRenameFile", "deleteFile", "mkdir", "rmdir"],
   "allowed_commands": [
     "ls", "pwd", "date", "cat", "grep", "egrep",
     "whoami", "head", "tail", "sed", "wc", "file", "du", "df",
@@ -399,7 +399,34 @@ Example:
 deleteFile("obsolete.txt")
 ```
 
-### 8. `editFile(file, script, args=None)`
+### 8. \`mkdir(path)\`
+
+Creates one directory using \`os.mkdir\` after checking the path with
+\`_local_path_error\`.
+
+Example:
+
+\`\`\`python
+mkdir("build")
+\`\`\`
+
+The parent directory must already exist.
+
+### 9. \`rmdir(path)\`
+
+Removes one empty directory using \`os.rmdir\` after checking the path with
+\`_local_path_error\`.
+
+Example:
+
+\`\`\`python
+rmdir("build")
+\`\`\`
+
+The directory must be empty; this tool does not recursively delete directory
+contents.
+
+### 10. `editFile(file, script, args=None)`
 
 Edits an existing text file beneath the configured working directory using GNU
 `sed`. The dedicated `script` parameter is the only source of the editing
@@ -455,7 +482,7 @@ and reports that the edit completed but the backup remains.
 > successful edits. Protect and remove them according to the same retention
 > policy as the source file.
 
-### 9. `applyPatch(file, diff, pnum=2, args=None)`
+### 11. `applyPatch(file, diff, pnum=2, args=None)`
 
 Applies a diff to one explicitly named file using GNU `patch`. The diff is
 normally a unified diff and is passed directly to `patch` over standard input.
@@ -484,7 +511,7 @@ The explicit `file` is authoritative; filenames embedded in the diff are not
 used to choose a target. Absolute paths and parent traversal are rejected, and
 the resolved target must remain within the configured current directory.
 
-### 10. `fetch(url, prettify=False)`
+### 12. `fetch(url, prettify=False)`
 
 Fetches a URL using `requests`. If `prettify` is `true`, it parses the HTML with BeautifulSoup and pretty-prints it.
 
