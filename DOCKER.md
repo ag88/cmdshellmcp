@@ -134,6 +134,13 @@ To use a different host port while retaining port `8003` inside the container:
 
 The format is `[HOST_IP:]HOST_PORT:CONTAINER_PORT`. With the last example, a local MCP client uses `http://127.0.0.1:9003/mcp`. For remote access, use an appropriate reachable host address and protect bearer credentials in transit, for example with a TLS reverse proxy or secure tunnel.
 
+Note that currently `1stRun.sh` publish a spare port 5000. This port is not used by `cmdshellmcp`, you can use it for any purpose from within the the container.
+e.g. if an LLM generates a python flask app in the container, you can use this port to run the generated app so that you can view the web page from the host.
+
+```bash
+--publish 5000:5000 \
+```
+
 `EXPOSE 8003` in the Dockerfile is metadata; `--publish` performs the mapping. Port mappings are fixed when the container is created. Editing `1stRun.sh` does not change an existing container: preserve your data, remove or rename the old container, and create a new one with the desired mapping.
 
 ## 6. Create the container and perform first-time setup
