@@ -1,6 +1,9 @@
 {
   "host": "127.0.0.1",
   "port": 8003,
+  "cwd": null,
+  "shellnopathchk": false,
+  "editdelbk": false,
   "quiet": false,
   "auditlog": null,
   "disableTools": [

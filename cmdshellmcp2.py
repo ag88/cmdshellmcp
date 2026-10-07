@@ -30,6 +30,11 @@ cwd = Path.home()
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8003
 DEFAULT_CONFIG = "cmdshellmcp.json"
+CONFIG_SEARCH_PATHS = (
+    Path("/etc/cmdshellmcp.d") / DEFAULT_CONFIG,
+    Path("/usr/local/python/cmdshellmcp") / DEFAULT_CONFIG,
+    Path(DEFAULT_CONFIG),
+)
 AUTH_TOKEN_BYTES = 16
 
 CORS_MIDDLEWARE = [
@@ -85,10 +90,10 @@ DEFAULT_ALLOWED_COMMANDS = SAFE_COMMANDS
 # Replaced with the effective configuration before tools are registered.
 ALLOWED_COMMANDS = DEFAULT_ALLOWED_COMMANDS.copy()
 
-# Set from --editdelbk before tools are registered.
+# Set from command-line/config values before tools are registered.
 EDIT_DELETE_BACKUP = False
 
-# Set from --shellnopathchk before tools are registered.
+# Set from command-line/config values before tools are registered.
 SHELL_NO_PATH_CHECK = False
 
 
@@ -632,7 +637,7 @@ def cmdshell_description(allowed_commands: list[str]) -> str:
     allowed = json.dumps(allowed_commands)
     example_command = allowed_commands[0]
     path_policy = (
-        "Argument path checks are disabled by --shellnopathchk."
+        "Argument path checks are disabled by --shellnopathchk or config shellnopathchk."
         if SHELL_NO_PATH_CHECK
         else "Arguments are checked with _local_path_error: empty arguments, absolute paths, "
              "and paths containing a '..' component are rejected."
@@ -665,7 +670,7 @@ Before editing, the tool creates the next available numbered backup (.bk1, .bk2,
 replaced only after sandboxed sed completes successfully. On success, the response
 contains a `diff -u` unified diff from the backup/original version to the edited
 file. If sed fails while the original is unchanged, the newly created backup is
-removed. When the server is started with `--editdelbk`, a successful edit's
+removed. When `--editdelbk` or config `editdelbk` is enabled, a successful edit's
 backup is deleted only after the unified diff response has been composed.
 
 Example: file="src/example.py", script="s/old_name/new_name/g". The resulting
@@ -736,9 +741,19 @@ class ArgumentParser(argparse.ArgumentParser):
         return shlex.split(line)
 
 
-def load_config(parser: argparse.ArgumentParser, filename: str) -> dict[str, Any]:
+def resolve_config_file(filename: Optional[str]) -> Optional[Path]:
+    """Select the explicit config or the first existing default config file."""
+    if filename is not None:
+        return Path(filename).expanduser()
+    return next((path for path in CONFIG_SEARCH_PATHS if path.is_file()), None)
+
+
+def load_config(parser: argparse.ArgumentParser, filename: Optional[str]) -> dict[str, Any]:
     """Read an optional JSON configuration file and validate its top-level shape."""
-    config_path = Path(filename).expanduser()
+    config_path = resolve_config_file(filename)
+    if config_path is None:
+        log.info("no config file found, using command-line/default values")
+        return {}
     if not config_path.is_file():
         log.info("config file not found, using command-line/default values: %s", config_path)
         return {}
@@ -808,8 +823,12 @@ def config_value(parser: argparse.ArgumentParser, config: dict[str, Any], key: s
         parser.error("config host must be a string")
     if key == "port" and (not isinstance(value, int) or isinstance(value, bool)):
         parser.error("config port must be an integer")
-    if key == "quiet" and not isinstance(value, bool):
-        parser.error("config quiet must be a boolean")
+    if key in ("quiet", "shellnopathchk", "editdelbk") and not isinstance(value, bool):
+        parser.error(f"config {key} must be a boolean")
+    if key == "cwd" and value is not None and (
+        not isinstance(value, str) or not value.strip()
+    ):
+        parser.error("config cwd must be a non-empty string or null")
     if key == "auditlog" and value is not None and not isinstance(value, str):
         parser.error("config auditlog must be a string or null")
     return value
@@ -855,14 +874,18 @@ def resolve_working_directory(
     parser: argparse.ArgumentParser,
     value: Optional[str],
     input_fn=input,
+    config: Optional[dict[str, Any]] = None,
 ) -> Path:
     """Prompt for and validate the directory used by all local tools.
 
-    An omitted value is requested interactively, with the process's current
-    directory as the default.  When standard input is unavailable (for example,
+    CLI values take precedence over config cwd. When neither supplies a path,
+    prompt with the process's current directory as the default.
+    When standard input is unavailable (for example,
     when started as a service), the default is selected without failing startup.
     """
     default = Path.cwd()
+    if value is None:
+        value = config_value(parser, config or {}, "cwd", None)
     if value is None:
         try:
             value = input_fn(f"Working directory [{default}]: ").strip()
@@ -892,13 +915,12 @@ if __name__ == "__main__":
         "--cwd",
         type=str,
         metavar="PATH",
-        help="working directory; prompts with the current directory by default",
+        help="working directory; overrides config cwd, otherwise prompts with the current directory as default",
     )
     parser.add_argument(
         "--conf",
-        default=DEFAULT_CONFIG,
         metavar="FILE",
-        help=f"optional JSON config file (default: {DEFAULT_CONFIG} in the current directory)",
+        help="JSON config file; otherwise searches /etc/cmdshellmcp.d, /usr/local/python/cmdshellmcp, then the current directory",
     )    
     parser.add_argument("--host", type=str, help="server bind host")
     parser.add_argument("--port", type=int, help="server bind port")
@@ -929,11 +951,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--shellnopathchk",
         action="store_true",
+        default=None,
         help="bypass cmdshell argument path checks (file tools still check paths)",
     )
     parser.add_argument(
         "--editdelbk",
         action="store_true",
+        default=None,
         help="delete editFile's numbered backup after composing a successful diff response",
     )
     parser.add_argument("--quiet", action="store_true", default=None, help="do not print audit events to stdout")
@@ -942,10 +966,15 @@ if __name__ == "__main__":
         dest="auditlog", metavar="FILE", help="append session audit events to FILE",
     )
     args = parser.parse_args()
-    EDIT_DELETE_BACKUP = args.editdelbk
-    SHELL_NO_PATH_CHECK = args.shellnopathchk
-
     config = load_config(parser, args.conf)
+    EDIT_DELETE_BACKUP = (
+        args.editdelbk if args.editdelbk is not None
+        else config_value(parser, config, "editdelbk", False)
+    )
+    SHELL_NO_PATH_CHECK = (
+        args.shellnopathchk if args.shellnopathchk is not None
+        else config_value(parser, config, "shellnopathchk", False)
+    )
 
     quiet = args.quiet if args.quiet is not None else config_value(parser, config, "quiet", False)
     configured_auditlog = config.get("auditlog", config.get("auditlogfile"))
@@ -974,7 +1003,7 @@ if __name__ == "__main__":
         disable_tools = normalize_disabled_tools(parser, configured_disabled_tools, "config")
 
     log.debug(args)
-    cwd = resolve_working_directory(parser, args.cwd)
+    cwd = resolve_working_directory(parser, args.cwd, config=config)
     log.info("working directory: %s", cwd)
     log.info("server address: %s:%s", host, port)
     if generated_auth:
