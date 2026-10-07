@@ -88,7 +88,7 @@ Review `cmdshellmcp.service` and `cmdshellmcp.json` before building.
 ### configuration file in container:
 
 Note that the configuration file in repo `cmdshellmcp_container.json` is copied into the image for container as `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
-The `cwd` *current working director* in the config file is set as `/home/codeagent`
+The `cwd` *current working directory* in the config file is set as `/home/codeagent`
 
 Within the container `/usr/local/python/cmdshellmcp/cmdshellmcp.json` is the main configuration file.
 
