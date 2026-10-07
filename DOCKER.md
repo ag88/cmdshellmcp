@@ -83,8 +83,18 @@ The application and environment are owned by root. The configuration is readable
 
 ## 3. Review the service and configuration
 
-Review `cmdshellmcp.service` and `cmdshellmcp.json` before building. The supplied service:
+Review `cmdshellmcp.service` and `cmdshellmcp.json` before building. 
 
+### configuration file in container:
+
+Note that the configuration file in repo `cmdshellmcp_container.json` is copied into the image for container as `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
+
+Within the container `/usr/local/python/cmdshellmcp/cmdshellmcp.json` is the main configuration file.
+
+### notes about the service
+
+The supplied service:
+  
 - Runs as `User=codeagent` and `Group=codeagent`, without sudo access.
 - Uses `/home/codeagent` for both `WorkingDirectory` and the server's `--cwd` argument.
 - Uses the virtual environment's Python and the configuration at `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
