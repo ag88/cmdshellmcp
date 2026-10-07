@@ -10,7 +10,7 @@ Group=codeagent
 WorkingDirectory=/home/codeagent
 Environment=HOME=/home/codeagent
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/local/python/cmdshellmcp/venv/bin/python /usr/local/python/cmdshellmcp/cmdshellmcp2.py --conf /usr/local/python/cmdshellmcp/cmdshellmcp.json --cwd /home/codeagent --host 0.0.0.0
+ExecStart=/usr/local/python/cmdshellmcp/venv/bin/python /usr/local/python/cmdshellmcp/cmdshellmcp2.py --host 0.0.0.0
 UMask=0027
 NoNewPrivileges=true
 Restart=on-failure

@@ -1,7 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 8003,
-  "cwd": null,
+  "cwd": "/home/codeagent",
   "shellnopathchk": false,
   "editdelbk": false,
   "quiet": false,

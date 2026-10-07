@@ -42,7 +42,8 @@ COPY requirements.txt /usr/local/python/cmdshellmcp/requirements.txt
 RUN python3 -m venv /usr/local/python/cmdshellmcp/venv \
     && /usr/local/python/cmdshellmcp/venv/bin/python -m pip install --no-cache-dir \
         -r /usr/local/python/cmdshellmcp/requirements.txt
-COPY cmdshellmcp2.py cmdshellmcp.json /usr/local/python/cmdshellmcp/
+COPY cmdshellmcp2.py /usr/local/python/cmdshellmcp/
+COPY cmdshellmcp_container.json /usr/local/python/cmdshellmcp/cmdshellmcp.json
 
 # Fixed service account. Password is set interactively on first start.
 RUN adduser --disabled-password --gecos "Code agent" codeagent \
@@ -122,7 +123,7 @@ fi
 exec "$@"
 SCRIPT
 
-# Must match the port in your local cmdshellmcp.json; EXPOSE does not publish it.
+# Must match the port in your local cmdshellmcp_container.json; EXPOSE does not publish it.
 EXPOSE 8003
 STOPSIGNAL SIGRTMIN+3
 ENTRYPOINT ["/usr/local/sbin/container-entrypoint"]

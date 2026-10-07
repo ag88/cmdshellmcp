@@ -1,4 +1,8 @@
 import asyncio
+import argparse
+import json
+import runpy
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -291,6 +295,92 @@ class ApplyPatchTests(unittest.TestCase):
         response = cmdshellmcp2.applyPatch("example.txt", self.diff().replace("-old", "-wrong"))
         self.assertTrue(response.startswith("Error:"), response)
         self.assertEqual(target.read_text(), "old\n")
+
+
+class ConfigurationTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.parser = argparse.ArgumentParser()
+        self.paths = tuple(self.root / name for name in ("etc.json", "install.json", "local.json"))
+        patch = mock.patch.object(cmdshellmcp2, "CONFIG_SEARCH_PATHS", self.paths)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_config_search_uses_first_existing_file_without_merging(self):
+        self.assertEqual(cmdshellmcp2.load_config(self.parser, None), {})
+        for index in reversed(range(len(self.paths))):
+            self.paths[index].write_text(json.dumps({"port": 8000 + index}))
+            self.assertEqual(cmdshellmcp2.load_config(self.parser, None), {"port": 8000 + index})
+
+    def test_explicit_config_bypasses_search_even_when_missing(self):
+        self.paths[0].write_text('{"port": 9000}')
+        explicit = self.root / "explicit.json"
+        self.assertEqual(cmdshellmcp2.load_config(self.parser, str(explicit)), {})
+        explicit.write_text('{"port": 9001}')
+        self.assertEqual(cmdshellmcp2.load_config(self.parser, str(explicit)), {"port": 9001})
+
+    def test_invalid_selected_config_does_not_fall_through(self):
+        self.paths[1].write_text('{"port": 9000}')
+        for content in ("invalid json", "[]"):
+            self.paths[0].write_text(content)
+            with self.assertRaises(SystemExit):
+                cmdshellmcp2.load_config(self.parser, None)
+
+    def test_cwd_cli_overrides_config_and_config_skips_prompt(self):
+        other = self.root / "other"
+        other.mkdir()
+        prompt = mock.Mock(side_effect=AssertionError("unexpected prompt"))
+        self.assertEqual(cmdshellmcp2.resolve_working_directory(
+            self.parser, str(other), prompt, {"cwd": str(self.root)}), other)
+        self.assertEqual(cmdshellmcp2.resolve_working_directory(
+            self.parser, None, prompt, {"cwd": str(self.root)}), self.root)
+
+    def test_cwd_prompt_and_process_directory_fallback(self):
+        with mock.patch.object(cmdshellmcp2.Path, "cwd", return_value=self.root):
+            for config in ({}, {"cwd": None}):
+                self.assertEqual(cmdshellmcp2.resolve_working_directory(
+                    self.parser, None, lambda _: str(self.root), config), self.root)
+                self.assertEqual(cmdshellmcp2.resolve_working_directory(
+                    self.parser, None, lambda _: "", config), self.root)
+                self.assertEqual(cmdshellmcp2.resolve_working_directory(
+                    self.parser, None, mock.Mock(side_effect=EOFError), config), self.root)
+
+    def test_invalid_config_cwd_fails_without_prompt(self):
+        for value in (False, 42, "", "  ", str(self.root / "missing")):
+            with self.subTest(value=value), self.assertRaises(SystemExit):
+                cmdshellmcp2.resolve_working_directory(
+                    self.parser, None, mock.Mock(side_effect=AssertionError), {"cwd": value})
+        file = self.root / "file"
+        file.touch()
+        with self.assertRaises(SystemExit):
+            cmdshellmcp2.resolve_working_directory(self.parser, str(file))
+
+    def test_new_boolean_keys_require_json_booleans(self):
+        for key in ("shellnopathchk", "editdelbk"):
+            self.assertFalse(cmdshellmcp2.config_value(self.parser, {}, key, False))
+            for value in (True, False):
+                self.assertIs(cmdshellmcp2.config_value(self.parser, {key: value}, key, False), value)
+            for value in ("false", 0, 1, None, []):
+                with self.subTest(key=key, value=value), self.assertRaises(SystemExit):
+                    cmdshellmcp2.config_value(self.parser, {key: value}, key, False)
+
+    def test_startup_resolves_boolean_config_and_cli_before_registration(self):
+        config = self.root / "startup.json"
+        for configured, flags, expected in (
+            ({}, [], False),
+            ({"shellnopathchk": True, "editdelbk": True}, [], True),
+            ({"shellnopathchk": False, "editdelbk": False}, ["--shellnopathchk", "--editdelbk"], True),
+        ):
+            config.write_text(json.dumps({"cwd": str(self.root), **configured}))
+            argv = ["cmdshellmcp2.py", "--conf", str(config), "--quiet", *flags]
+            with mock.patch.object(sys, "argv", argv), mock.patch("fastmcp.server.FastMCP") as server:
+                server.return_value.list_tools = mock.AsyncMock(return_value=[])
+                state = runpy.run_path(str(Path(cmdshellmcp2.__file__)), run_name="__main__")
+            self.assertIs(state["SHELL_NO_PATH_CHECK"], expected)
+            self.assertIs(state["EDIT_DELETE_BACKUP"], expected)
+            self.assertEqual(state["cwd"], self.root)
 
 
 if __name__ == "__main__":

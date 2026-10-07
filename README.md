@@ -77,9 +77,17 @@ the dedicated tool and do not need to appear in `allowed_commands`.
 
 ## Configuration
 
-When `--conf` is not given, the server reads the optional `cmdshellmcp.json`
-configuration file from the current directory. If the file does not exist, the
-server uses command-line and built-in default values.
+The server selects one JSON configuration file in this order (files are not merged):
+
+1. The file specified by `--conf`, when given (no automatic search).
+2. `/etc/cmdshellmcp.d/cmdshellmcp.json`.
+3. `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
+4. `cmdshellmcp.json` in the process's current directory.
+5. If no file exists, command-line settings and internal defaults apply.
+
+A missing explicit `--conf` file also uses command-line settings and internal
+defaults; it does not search other locations. An invalid selected JSON file
+causes startup to fail. Command-line options override their configuration keys.
 
 Example:
 
@@ -87,6 +95,9 @@ Example:
 {
   "host": "127.0.0.1",
   "port": 8003,
+  "cwd": null,
+  "shellnopathchk": false,
+  "editdelbk": false,
   "quiet": false,
   "auditlog": null,
   "disableTools": ["writeFile", "editFile", "applyPatch", "copyFile", "moveRenameFile", "deleteFile", "mkdir", "rmdir"],
@@ -104,6 +115,9 @@ Supported configuration keys:
 
 - `host`: bind host; default `127.0.0.1`
 - `port`: bind port; default `8003`
+- `cwd`: working directory path; omitted or `null` prompts, then defaults to the process's current directory
+- `shellnopathchk`: boolean; bypasses shell argument path checks when `true`; default `false`
+- `editdelbk`: boolean; deletes successful edit backups after composing the diff when `true`; default `false`
 - `quiet`: suppresses audit output to stdout when `true`
 - `auditlog`: optional path to an audit log file
 - `allowed_commands`: list of commands permitted for execution
@@ -118,8 +132,8 @@ Start the server with the default settings:
 python cmdshellmcp2.py
 ```
 
-When `--cwd` is omitted, the server prompts for a working directory and shows the
-process's current directory as the default. Press Enter to accept it. If standard
+When neither `--cwd` nor config `cwd` supplies a path, the server prompts for a
+working directory and shows the process's current directory as the default. Press Enter to accept it. If standard
 input is unavailable (for example, when running as a service), the current
 directory is selected automatically. The server then starts on `127.0.0.1:8003`
 using the streamable HTTP transport.
@@ -217,18 +231,18 @@ python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
 Options:
 
 - `--cwd`: working directory used for file and shell operations; when omitted,
-  prompt with the process's current directory as the default
+  use config `cwd`, otherwise prompt with the process's current directory as the default
 - `--host`: server bind host
 - `--port`: server bind port
 - `--allow`: override the allowlist for the current process; may be repeated
 - `--disableTools`: comma-separated MCP tool names to omit; overrides the
   `disableTools` list from the config file; case sensitive and exact name match is required
 - `--editdelbk`: delete the numbered backup after `editFile` has completed
-  successfully and composed its unified diff response
+  successfully and composed its unified diff response; overrides config `editdelbk`
 - `--shellnopathchk`: bypass `_local_path_error` checks on `cmdshell` arguments
-  for this server process; file tools continue to check their paths
-- `--conf`: JSON config file path; when omitted, defaults to
-  `cmdshellmcp.json` in the current directory
+  for this server process; overrides config `shellnopathchk`; file tools continue to check their paths
+- `--conf`: explicit JSON config file path; when omitted, search the locations
+  listed in [Configuration](#configuration)
 - `--auth`: use a fixed bearer token instead of generating one
 - `--noauth`: explicitly disable bearer authentication; mutually exclusive with
   `--auth` and unsafe on untrusted networks
@@ -268,7 +282,7 @@ Security features include:
   and removal of surrounding double quotes, before expanding globs. Expanded
   filenames are also checked before execution. Empty arguments, absolute paths,
   and paths containing a `..` component are rejected by default.
-- Start the server with `--shellnopathchk` when shell commands need access to
+- Start the server with `--shellnopathchk` or set config `shellnopathchk` to `true` when shell commands need access to
   shared resources such as `/usr/share` or `/usr/include`. This bypass applies
   only to `cmdshell`; the command allowlist remains enforced.
 - File tools perform basic `_local_path_error` checks intended to keep file paths within `--cwd`: absolute paths and paths containing `..` are rejected
@@ -283,6 +297,25 @@ Security features include:
 - Patch application blocks dangerous path-changing options
 
 In short: the shell is a narrow sandbox for controlled read/write operations, not a full-host terminal.
+
+### Working directory resolution
+
+The directory used by shell and file tools is selected in this order:
+
+1. `--cwd PATH`, when given.
+2. `cwd` from the selected configuration file, when non-null.
+3. The path entered at the working directory prompt.
+4. The process's current directory if the prompt is left blank or stdin reaches EOF.
+
+An explicit or configured path skips the prompt. Paths must exist and be
+directories; `~` is expanded and paths are resolved to absolute paths. Relative
+paths are resolved against the process's current directory, including paths
+from a configuration file (not against the config file's location). Invalid
+paths fail startup rather than falling through to another directory.
+Configuration discovery also uses the process's current directory, before
+working directory selection. For services, set `--cwd` or config `cwd` to make
+the tool directory independent of the service's launch directory. This directory
+scopes local operations but does not provide a complete filesystem sandbox.
 
 ## MCP tools exposed to AI agents
 
@@ -469,7 +502,7 @@ diff -u src/example.py.bk1 src/example.py
 The backup is the old version and the current file is the new version. A no-op
 edit is reported explicitly and still retains its numbered backup.
 
-Start the server with `--editdelbk` to remove each numbered backup after a
+Start the server with `--editdelbk` or set config `editdelbk` to `true` to remove each numbered backup after a
 successful edit. The tool first runs `diff` and composes the complete response,
 so the returned unified diff remains available even though the backup has been
 deleted. The success message identifies the deleted backup. Backups are still
@@ -478,7 +511,7 @@ for recovery. If backup deletion itself fails, the response begins with `Error:`
 and reports that the edit completed but the backup remains.
 
 > **Security note:** backups contain the complete pre-edit file, including any
-> secrets it held. Unless `--editdelbk` is enabled, they remain on disk after
+> secrets it held. Unless `--editdelbk` or config `editdelbk` is enabled, they remain on disk after
 > successful edits. Protect and remove them according to the same retention
 > policy as the source file.
 
