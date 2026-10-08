@@ -18,7 +18,7 @@ for a particular scope / context / intent.
 The default allowed commands are not necessarily safe, i.e. LLM agents or practically clients calling
 the MCP api can 'escape' and do things outside a context e.g. the working directory defined with `--cwd`
 option. It validates the arguments in a limited way, i.e. looking for string path patterns if they seem to escape the current 
-directory, this is a heuristic check, i.e. this check is pattern matching, it does not know if that argument is intended to be a file 
+directory. This is a heuristic check, i.e. this check is pattern matching, it does not know if that argument is intended to be a file 
 or directory. Nor does it know the argument's context for a particular command, or if they are after all safe. 
 e.g. it may prevent a `ls /` (listing a root directory), but sometimes that is what you need. But it may prevent by sheer pattern
 matching e.g. `rm /PreciousFile.txt` i.e. remove a file in the root directory. This is not an always secure check, but added
