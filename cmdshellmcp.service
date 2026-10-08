@@ -13,8 +13,8 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/local/python/cmdshellmcp/venv/bin/python /usr/local/python/cmdshellmcp/cmdshellmcp2.py --host 0.0.0.0
 UMask=0027
 NoNewPrivileges=true
-Restart=on-failure
-RestartSec=5
+#Restart=on-failure
+#RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
