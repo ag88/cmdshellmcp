@@ -125,32 +125,40 @@ If you change `IMAGE_NAME` in `0dockerBuild.sh`, make the corresponding change i
 
 ## 5. Review the first-run script and port mapping
 
-Review `1stRun.sh` before creating the container. It names the container `cmdshellmcp`, sets its hostname to `cmdshellmcp`, and currently publishes:
+Review `1stRun.sh` before creating the container. It names the container `cmdshellmcp`, sets its hostname to `cmdshellmcp`, and interactively configures published ports before calling Docker:
 
-```bash
---publish 8003:8003 \
+1. Choose the binding for port `8003`, the cmdshellmcp MCP server port.
+2. Choose whether to publish spare application port `5000` (default yes), then choose its binding. This port can serve an application developed or executed inside the container, such as an LLM-generated Flask web app.
+3. At `Add another published port? [y/N]:`, choose yes to reserve more application ports. The first suggested container port is `5001`; the host port defaults to the selected container port. Subsequent suggestions advance from the last selected container port, wrap after `65535`, and skip already selected host and container ports. You can choose different host and container ports.
+4. Review the mapping summary and answer `Start container with these settings? [Y/n]:`. Declining exits without creating the container.
+
+For every published port, the binding menu offers:
+
+```text
+  1) Localhost only (default)
+  2) All network interfaces
+
+Selection [1]:
 ```
 
-This makes port `8003` available on all host interfaces, subject to host networking and firewall rules. For access only from the host, change it to:
+Pressing Enter accepts each documented default. Accepting all defaults produces:
 
 ```bash
 --publish 127.0.0.1:8003:8003 \
+--publish 127.0.0.1:5000:5000
 ```
 
-To use a different host port while retaining port `8003` inside the container:
+Localhost binding is safer and restricts ordinary direct access to the Docker host. Selecting all network interfaces uses an explicit `0.0.0.0` host binding, exposing the port through the host's network interfaces, subject to firewall rules. For example, choosing container port `8080`, host port `9080`, and binding option `2` adds:
 
 ```bash
---publish 127.0.0.1:9003:8003 \
+--publish 0.0.0.0:9080:8080
 ```
 
-The format is `[HOST_IP:]HOST_PORT:CONTAINER_PORT`. With the last example, a local MCP client uses `http://127.0.0.1:9003/mcp`. For remote access, use an appropriate reachable host address and protect bearer credentials in transit, for example with a TLS reverse proxy or secure tunnel.
+The format is `HOST_IP:HOST_PORT:CONTAINER_PORT`. The default local MCP endpoint is `http://127.0.0.1:8003/mcp`. For remote access, select option `2` for port `8003`, use an appropriate reachable host address, and protect bearer credentials in transit, for example with a TLS reverse proxy or secure tunnel.
 
-Note that currently `1stRun.sh` publish a spare port 5000. This port is not used by `cmdshellmcp`, you can use it for any purpose from within the the container.
-e.g. if an LLM generates a python flask app in the container, you can use this port to run the generated app so that you can view the web page from the host.
+Port numbers must be integers from `1` to `65535`; leading zeros are interpreted as decimal. Invalid port numbers, repeated host ports (including across binding choices), and invalid menu or yes/no responses are rejected and prompted again. EOF or interrupted input cancels configuration without starting Docker. Validation checks the mappings selected in this run; Docker still reports host ports already occupied by other processes or containers.
 
-```bash
---publish 5000:5000 \
-```
+These choices configure Docker publishing only. They do not change the MCP server's own listening configuration. Applications using spare ports must listen on the selected container port and an address reachable through Docker networking, typically `0.0.0.0` inside the container.
 
 `EXPOSE 8003` in the Dockerfile is metadata; `--publish` performs the mapping. Port mappings are fixed when the container is created. Editing `1stRun.sh` does not change an existing container: preserve your data, remove or rename the old container, and create a new one with the desired mapping.
 
@@ -162,7 +170,7 @@ e.g. if an LLM generates a python flask app in the container, you can use this p
 bash 1stRun.sh
 ```
 
-This calls `docker run -it`: it creates the container and starts it interactively. It does not build the image. Run it once for each new container, after building the image.
+After you configure and confirm the published ports, this calls `docker run -it`: it creates the container and starts it interactively. It does not build the image. Run it once for each new container, after building the image.
 
 You will be prompted for three sets of passwords, each with confirmation. Password input is hidden:
 
