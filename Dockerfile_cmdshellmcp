@@ -43,14 +43,15 @@ RUN python3 -m venv /usr/local/python/cmdshellmcp/venv \
     && /usr/local/python/cmdshellmcp/venv/bin/python -m pip install --no-cache-dir \
         -r /usr/local/python/cmdshellmcp/requirements.txt
 COPY cmdshellmcp2.py /usr/local/python/cmdshellmcp/
-COPY cmdshellmcp_container.json /usr/local/python/cmdshellmcp/cmdshellmcp.json
+
+COPY cmdshellmcp_container.json /etc/cmdshellmcp.d/cmdshellmcp.json
 
 # Fixed service account. Password is set interactively on first start.
 RUN adduser --disabled-password --gecos "Code agent" codeagent \
     && chmod 2750 /home/codeagent \
     && chown -R root:root /usr/local/python/cmdshellmcp \
-    && chown root:codeagent /usr/local/python/cmdshellmcp/cmdshellmcp.json \
-    && chmod 0640 /usr/local/python/cmdshellmcp/cmdshellmcp.json \
+    && chown root:codeagent /etc/cmdshellmcp.d/cmdshellmcp.json \
+    && chmod 0640 /etc/cmdshellmcp.d/cmdshellmcp.json \
     && printf '%s\n' 'umask 0027' > /etc/profile.d/container-umask.sh
 
 COPY cmdshellmcp.service /etc/systemd/system/cmdshellmcp.service

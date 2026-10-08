@@ -87,10 +87,10 @@ Review `cmdshellmcp.service` and `cmdshellmcp.json` before building.
 
 ### configuration file in container:
 
-Note that the configuration file in repo `cmdshellmcp_container.json` is copied into the image for container as `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
+Note that the configuration file in repo `cmdshellmcp_container.json` is copied into the image for container as `/etc/cmdshellmcp.d/cmdshellmcp.json`.
 The `cwd` *current working directory* in the config file is set as `/home/codeagent`
 
-Within the container `/usr/local/python/cmdshellmcp/cmdshellmcp.json` is the main configuration file.
+Within the container `/etc/cmdshellmcp.d/cmdshellmcp.json` is the main configuration file.
 
 ### notes about the service
 
@@ -98,7 +98,7 @@ The supplied service:
   
 - Runs as `User=codeagent` and `Group=codeagent`, without sudo access.
 - Uses `/home/codeagent` for both `WorkingDirectory` and the server's `--cwd` argument.
-- Uses the virtual environment's Python and the configuration at `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
+- Uses the virtual environment's Python and the configuration at `/etc/cmdshellmcp.d/cmdshellmcp.json`.
 - Overrides the configuration's host with `--host 0.0.0.0`, allowing Docker's published port to reach the server.
 - Uses the configured port, normally `8003`, and restarts after failure.
 - Sends output to the systemd journal and sets `NoNewPrivileges=true`.
@@ -382,9 +382,9 @@ Use the exact filename `cmdshellmcp.service`. Changes to the unit need `daemon-r
 **Container — admin**:
 
 ```bash
-sudo cp -a /usr/local/python/cmdshellmcp/cmdshellmcp.json /usr/local/python/cmdshellmcp/cmdshellmcp.json.bak
-sudo nano /usr/local/python/cmdshellmcp/cmdshellmcp.json
-sudo /usr/local/python/cmdshellmcp/venv/bin/python -m json.tool /usr/local/python/cmdshellmcp/cmdshellmcp.json > /dev/null
+sudo cp -a /etc/cmdshellmcp.d/cmdshellmcp.json /etc/cmdshellmcp.d/cmdshellmcp.json.bak
+sudo nano /etc/cmdshellmcp.d/cmdshellmcp.json
+sudo /usr/local/python/cmdshellmcp/venv/bin/python -m json.tool /etc/cmdshellmcp.d/cmdshellmcp.json > /dev/null
 sudo systemctl restart cmdshellmcp.service
 ```
 
