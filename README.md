@@ -77,17 +77,18 @@ the dedicated tool and do not need to appear in `allowed_commands`.
 
 ## Configuration
 
-The server selects one JSON configuration file in this order (files are not merged):
+A configuration file is mandatory. The server selects one JSON file in this
+order (files are not merged):
 
 1. The file specified by `--conf`, when given (no automatic search).
 2. `/etc/cmdshellmcp.d/cmdshellmcp.json`.
 3. `/usr/local/python/cmdshellmcp/cmdshellmcp.json`.
-4. `cmdshellmcp.json` in the process's current directory.
-5. If no file exists, command-line settings and internal defaults apply.
 
-A missing explicit `--conf` file also uses command-line settings and internal
-defaults; it does not search other locations. An invalid selected JSON file
-causes startup to fail. Command-line options override their configuration keys.
+The current directory is never searched automatically. If no config is found,
+startup exits with an error suggesting `--conf FILE`. A missing explicit file,
+unreadable file, or invalid selected JSON file also fails startup. Command-line
+options override their configuration keys; omitted optional settings retain
+internal defaults within the required configuration.
 
 Example:
 
@@ -95,7 +96,7 @@ Example:
 {
   "host": "127.0.0.1",
   "port": 8003,
-  "cwd": null,
+  "cwd": "/path/to/project",
   "shellnopathchk": false,
   "editdelbk": false,
   "quiet": false,
@@ -115,7 +116,7 @@ Supported configuration keys:
 
 - `host`: bind host; default `127.0.0.1`
 - `port`: bind port; default `8003`
-- `cwd`: working directory path; omitted or `null` prompts, then defaults to the process's current directory
+- `cwd`: working directory path; required unless `--cwd` is supplied
 - `shellnopathchk`: boolean; bypasses shell argument path checks when `true`; default `false`
 - `editdelbk`: boolean; deletes successful edit backups after composing the diff when `true`; default `false`
 - `quiet`: suppresses audit output to stdout when `true`
@@ -126,17 +127,19 @@ Supported configuration keys:
 
 ## Running the server
 
-Start the server with the default settings:
+Start with an explicit configuration and working directory:
 
 ```bash
-python cmdshellmcp2.py
+python cmdshellmcp2.py --conf /path/to/cmdshellmcp.json --cwd /path/to/project
 ```
 
-When neither `--cwd` nor config `cwd` supplies a path, the server prompts for a
-working directory and shows the process's current directory as the default. Press Enter to accept it. If standard
-input is unavailable (for example, when running as a service), the current
-directory is selected automatically. The server then starts on `127.0.0.1:8003`
-using the streamable HTTP transport.
+If the config is installed in a default search location and supplies `cwd`,
+`python cmdshellmcp2.py` is sufficient. Startup fails when neither `--cwd` nor
+config `cwd` supplies a directory. There is no prompt or automatic working
+directory fallback. The selected directory is logged before the server starts.
+By default, the server listens on `127.0.0.1:8003` using streamable HTTP.
+The following examples assume a config is installed in a default search location;
+otherwise add `--conf FILE`. Supply `--cwd PATH` if the config leaves `cwd` unset.
 
 ### SSE mode
 
@@ -164,7 +167,7 @@ specific trusted origins.
 python cmdshellmcp2.py --cwd /path/to/project
 ```
 
-This sets the working directory used by file and shell tools without prompting.
+This overrides config `cwd` for file and shell tools. A configuration file is still required.
 The path must exist and must be a directory; `~` is expanded and the selected
 path is normalized to an absolute path.
 
@@ -231,7 +234,7 @@ python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
 Options:
 
 - `--cwd`: working directory used for file and shell operations; when omitted,
-  use config `cwd`, otherwise prompt with the process's current directory as the default
+  use config `cwd`, otherwise exit with a missing working directory error
 - `--host`: server bind host
 - `--port`: server bind port
 - `--allow`: override the allowlist for the current process; may be repeated
@@ -298,24 +301,43 @@ Security features include:
 
 In short: the shell is a narrow sandbox for controlled read/write operations, not a full-host terminal.
 
+### Configuration file resolution and placement
+
+The server requires a configuration file. `--conf FILE` selects it explicitly;
+otherwise only `/etc/cmdshellmcp.d/cmdshellmcp.json` and then
+`/usr/local/python/cmdshellmcp/cmdshellmcp.json` are checked. A config in the
+process's current directory is never loaded automatically. Missing or invalid
+configuration fails startup, preventing an unintended policy from being loaded
+from the client's working files.
+
+Keep the configuration outside the tool working directory and protect it with
+filesystem ownership and permissions that prevent the server account from
+modifying it. At startup, after logging the working directory, the server checks
+both the selected config path and its resolved symlink target. If either lies
+within the working directory, it logs a warning naming the config and working
+directory: the MCP client may read or modify the config and compromise the
+sandbox's security posture. This check warns and allows startup; it does not
+block access or enforce isolation. Placing the config outside the working
+directory helps prevent access through local file tools, but lexical path checks,
+symlinks, and powerful allowlisted commands still require careful permissions
+and sandboxing.
+
 ### Working directory resolution
 
 The directory used by shell and file tools is selected in this order:
 
 1. `--cwd PATH`, when given.
-2. `cwd` from the selected configuration file, when non-null.
-3. The path entered at the working directory prompt.
-4. The process's current directory if the prompt is left blank or stdin reaches EOF.
+2. `cwd` from the selected configuration file.
 
-An explicit or configured path skips the prompt. Paths must exist and be
-directories; `~` is expanded and paths are resolved to absolute paths. Relative
-paths are resolved against the process's current directory, including paths
-from a configuration file (not against the config file's location). Invalid
-paths fail startup rather than falling through to another directory.
-Configuration discovery also uses the process's current directory, before
-working directory selection. For services, set `--cwd` or config `cwd` to make
-the tool directory independent of the service's launch directory. This directory
-scopes local operations but does not provide a complete filesystem sandbox.
+If neither supplies a path, startup exits with a missing working directory
+error. There is no interactive prompt and no fallback to the process's current
+directory. Paths must exist and be directories; `~` is expanded and paths are
+resolved to absolute paths. Relative paths are resolved against the process's
+current directory, including paths from config (not against the config file's
+location). Invalid paths fail startup. The selected absolute directory is logged.
+Set an absolute `--cwd` or config `cwd` for services so the tool directory is
+independent of the launch directory. This directory scopes local operations
+but does not provide a complete filesystem sandbox.
 
 ## MCP tools exposed to AI agents
 
@@ -559,6 +581,7 @@ fetch("https://example.com", prettify=True)
 
 ```bash
 python cmdshellmcp2.py \
+  --conf /etc/cmdshellmcp.d/cmdshellmcp.json \
   --cwd /workspace/project \
   --host 0.0.0.0 \
   --port 8003 \
