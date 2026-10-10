@@ -678,8 +678,6 @@ backup might be `src/example.py.bk1`.
 
 
 def create_server(
-    host: str,
-    port: int,
     allowed_commands: list[str],
     auth: str,
     disable_tools: Optional[list[str]] = None,
@@ -902,8 +900,6 @@ def warn_config_in_working_directory(config_path: Path, directory: Path) -> None
 
 
 if __name__ == "__main__":
-    # Set level=logging.DEBUG here to include the original diagnostic messages.
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     parser = ArgumentParser(
         description="MCP server offering shell commands, file write and url fetch",
         fromfile_prefix_chars='@'
@@ -962,7 +958,19 @@ if __name__ == "__main__":
         "--auditlog", "--auditlogfile", "--auditlologfile.log",
         dest="auditlog", metavar="FILE", help="append session audit events to FILE",
     )
+    parser.add_argument(
+        "--stdio",
+        action="store_true",
+        default=None,
+        help="start the server in stdio mode, i.e. listen for clients/ tool calls on stdio",
+    )
     args = parser.parse_args()
+    if args.stdio:
+        logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    else:
+        # Set level=logging.DEBUG here to include the original diagnostic messages.
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+
     config_path = resolve_config_file(args.conf)
     if config_path is None:
         parser.error("a config file is required; specify one with --conf FILE")
@@ -983,12 +991,29 @@ if __name__ == "__main__":
     auditlog = args.auditlog if args.auditlog is not None else configured_auditlog
     configure_audit(quiet, auditlog)
 
-    host = args.host if args.host is not None else config_value(parser, config, "host", DEFAULT_HOST)
-    port = args.port if args.port is not None else config_value(parser, config, "port", DEFAULT_PORT)
-    if not 1 <= port <= 65535:
-        parser.error("port must be in the range 1..65535")
+    cwd = resolve_working_directory(parser, args.cwd, config=config)
+    log.info("working directory: %s", cwd)
+    warn_config_in_working_directory(config_path, cwd)
 
-    auth, generated_auth = resolve_auth(parser, args.auth, args.noauth, config)
+    host = None
+    port = None
+    auth = None
+    generated_auth = None
+    if not args.stdio:
+        host = args.host if args.host is not None else config_value(parser, config, "host", DEFAULT_HOST)
+        port = args.port if args.port is not None else config_value(parser, config, "port", DEFAULT_PORT)
+        if not 1 <= port <= 65535:
+            parser.error("port must be in the range 1..65535")
+
+        log.info("server address: %s:%s", host, port)
+
+        auth, generated_auth = resolve_auth(parser, args.auth, args.noauth, config)
+
+    if generated_auth:
+        log.info("generated auth token: %s", highlighted(auth))
+    elif auth is None:
+        log.warning("authentication is disabled by --noauth")
+
 
     configured_commands = config.get("allowed_commands", DEFAULT_ALLOWED_COMMANDS)
     if args.allow is not None:
@@ -1003,16 +1028,7 @@ if __name__ == "__main__":
         disable_tools = normalize_disabled_tools(parser, configured_disabled_tools, "config")
 
     log.debug(args)
-    cwd = resolve_working_directory(parser, args.cwd, config=config)
-    log.info("working directory: %s", cwd)
-    warn_config_in_working_directory(config_path, cwd)
-    log.info("server address: %s:%s", host, port)
-    if generated_auth:
-        log.info("generated auth token: %s", highlighted(auth))
-    elif auth is None:
-        log.warning("authentication is disabled by --noauth")
-
-    mcp = create_server(host, port, ALLOWED_COMMANDS, auth, disable_tools)
+    mcp = create_server(ALLOWED_COMMANDS, auth, disable_tools)
     asyncio.run(listtools(mcp))
     log.info("allowed commands: %s", ALLOWED_COMMANDS)
 
@@ -1025,6 +1041,8 @@ if __name__ == "__main__":
             port=port,
             middleware=CORS_MIDDLEWARE,
         )
+    if args.stdio:
+        mcp.run()
     else:
         log.info("running streamable-http transport")
         mcp.run(
