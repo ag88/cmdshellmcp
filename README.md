@@ -233,7 +233,7 @@ For more details review [DOCKER.md](DOCKER.md)
 python cmdshellmcp2.py [--cwd PATH] [--host HOST] [--port PORT] \
   [--allow COMMAND [COMMAND ...]] [--conf FILE] [--auth TOKEN | --noauth] \
   [--disableTools TOOL[,TOOL...]] [--editdelbk] [--shellnopathchk] [--sse] [--quiet] \
-  [--auditlog FILE]
+  [--auditlog FILE] [--stdio]
 ```
 
 Options:
@@ -257,6 +257,13 @@ Options:
 - `--sse`: use SSE transport instead of streamable HTTP
 - `--quiet`: suppress audit output on stdout
 - `--auditlog`: write audit logs to a given file
+- `--stdio`: start the server in stdio mode, i.e. listen for clients/ tool calls on stdio.  
+     warning: this implies `--noauth`, stdio clients connect without auth and runs with the 
+     authorizations of the userid running it, including shell commands.
+     This server is not intended to be used with `--stdio` as it compromise the security posture as 
+     documented in the RCE (remote command execution) warning section, this is provided 
+     for specific use cases e.g. such as with a `mcp-proxy` in which the mcp proxy handles
+     authentication and that it is run in its own sandbox container etc.
 
 ### Allowlist override
 
