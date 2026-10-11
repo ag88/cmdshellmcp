@@ -962,7 +962,11 @@ if __name__ == "__main__":
         "--stdio",
         action="store_true",
         default=None,
-        help="start the server in stdio mode, i.e. listen for clients/ tool calls on stdio",
+        help="""
+        start the server in stdio mode, i.e. listen for clients/ tool calls on stdio.
+        warning: this implies --noauth, stdio clients connect without auth
+        and runs with the authorizations of the userid running it, including shell commands
+        """,
     )
     args = parser.parse_args()
     if args.stdio:
