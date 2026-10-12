@@ -118,7 +118,7 @@ def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
         if quoted:
             arg = arg[1:-1] 
         if not SHELL_NO_PATH_CHECK:
-            error = _local_path_error(arg)
+            error = _local_path_error(arg, needfile=False)
             if error:
                 audit.error("cmdshell argument %r: %s", arg, error)
                 return error
@@ -142,7 +142,7 @@ def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
 
     if not SHELL_NO_PATH_CHECK:
         for arg in expanded_args:
-            error = _local_path_error(arg)
+            error = _local_path_error(arg, needfile=False)
             if error:
                 audit.error("cmdshell expanded argument %r: %s", arg, error)
                 return error
@@ -171,12 +171,15 @@ def cmdshell(command: str, args: Optional[list[str]] = None) -> str:
         return f"Error executing command: {str(e)}"
 
 
-def _local_path_error(file: str) -> Optional[str]:
-    """Return an error when a tool path could escape the configured directory."""
+def _local_path_error(file: str, needfile: bool) -> Optional[str]:
+    """Validate a local path, requiring a non-empty filename when needfile is true."""
     if cwd is None:
         return "Error: the current directory is not set; report it to the user"
     if not file:
-        return "Error: filename is required"
+        if not needfile:
+            return ""
+        else:
+            return "Error: filename is required"
     if file.startswith("/") or Path(file).is_absolute():
         return "Error: absolute paths not allowed"
     if ".." in Path(file).parts:
@@ -195,7 +198,7 @@ def writeFile(file: str, text: str, append: bool = False, newline = True) -> str
     Return:
         a string indicating status of write
     """
-    error = _local_path_error(file)
+    error = _local_path_error(file, needfile=True)
     if error:
         audit.error("writeFile %r: %s", file, error)
         return error
@@ -223,7 +226,7 @@ def writeFile(file: str, text: str, append: bool = False, newline = True) -> str
 
 def readFile(file: str) -> str:
     """Read and return a UTF-8 text file beneath the current directory."""
-    error = _local_path_error(file)
+    error = _local_path_error(file, needfile=True)
     if error:
         audit.error("readFile %r: %s", file, error)
         return error
@@ -237,7 +240,7 @@ def readFile(file: str) -> str:
 
 def listFiles(path: str = ".") -> str:
     """List entries in a directory beneath the current directory."""
-    error = _local_path_error(path)
+    error = _local_path_error(path, needfile=True)
     if error:
         audit.error("listFiles %r: %s", path, error)
         return error
@@ -257,7 +260,7 @@ def listFiles(path: str = ".") -> str:
 def copyFile(source: str, destination: str) -> str:
     """Copy a local file beneath the configured current directory."""
     for label, file in (("source", source), ("destination", destination)):
-        error = _local_path_error(file)
+        error = _local_path_error(file, needfile=True)
         if error:
             audit.error("copyFile %s %r: %s", label, file, error)
             return error
@@ -278,7 +281,7 @@ def copyFile(source: str, destination: str) -> str:
 def moveRenameFile(source: str, destination: str) -> str:
     """Move or rename a local file beneath the configured current directory."""
     for label, file in (("source", source), ("destination", destination)):
-        error = _local_path_error(file)
+        error = _local_path_error(file, needfile=True)
         if error:
             audit.error("moveRenameFile %s %r: %s", label, file, error)
             return error
@@ -298,7 +301,7 @@ def moveRenameFile(source: str, destination: str) -> str:
 
 def deleteFile(file: str) -> str:
     """Delete a local file beneath the configured current directory."""
-    error = _local_path_error(file)
+    error = _local_path_error(file, needfile=True)
     if error:
         audit.error("deleteFile %r: %s", file, error)
         return error
@@ -318,7 +321,7 @@ def deleteFile(file: str) -> str:
 
 def mkdir(path: str) -> str:
     """Create one directory beneath the configured current directory."""
-    error = _local_path_error(path)
+    error = _local_path_error(path, needfile=True)
     if error:
         audit.error("mkdir %r: %s", path, error)
         return error
@@ -335,7 +338,7 @@ def mkdir(path: str) -> str:
 
 def rmdir(path: str) -> str:
     """Remove one empty directory beneath the configured current directory."""
-    error = _local_path_error(path)
+    error = _local_path_error(path, needfile=True)
     if error:
         audit.error("rmdir %r: %s", path, error)
         return error
@@ -376,7 +379,7 @@ def _remove_unused_backup(backup_path: Path) -> None:
 
 def editFile(file: str, script: str, args: Optional[list[str]] = None) -> str:
     """Edit an existing local text file with sed and retain a numbered backup."""
-    error = _local_path_error(file)
+    error = _local_path_error(file, needfile=True)
     if error:
         audit.error("editFile %r: %s", file, error)
         return error
@@ -552,7 +555,7 @@ def applyPatch(
     are restricted to a small allowlist that cannot select input/output files,
     another target, a directory, or a different strip value.
     """
-    error = _local_path_error(file) if isinstance(file, str) else "Error: filename must be a string"
+    error = _local_path_error(file, needfile=True) if isinstance(file, str) else "Error: filename must be a string"
     if error:
         audit.error("applyPatch %r: %s", file, error)
         return error
@@ -638,8 +641,8 @@ def cmdshell_description(allowed_commands: list[str]) -> str:
     path_policy = (
         "Argument path checks are disabled by --shellnopathchk or config shellnopathchk."
         if SHELL_NO_PATH_CHECK
-        else "Arguments are checked with _local_path_error: empty arguments, absolute paths, "
-             "and paths containing a '..' component are rejected."
+        else "Arguments are checked with _local_path_error: empty arguments are allowed; "
+             "absolute paths and paths containing a '..' component are rejected."
     )
     return f"""Runs one of the configured Linux/Unix commands.
 

@@ -295,12 +295,12 @@ Security features include:
 - Piping is not supported by design
 - `cmdshell` checks every argument with `_local_path_error` after escape decoding
   and removal of surrounding double quotes, before expanding globs. Expanded
-  filenames are also checked before execution. Empty arguments, absolute paths,
-  and paths containing a `..` component are rejected by default.
+  filenames are also checked before execution. Empty arguments are allowed;
+  absolute paths and paths containing a `..` component are rejected by default.
 - Start the server with `--shellnopathchk` or set config `shellnopathchk` to `true` when shell commands need access to
   shared resources such as `/usr/share` or `/usr/include`. This bypass applies
   only to `cmdshell`; the command allowlist remains enforced.
-- File tools perform basic `_local_path_error` checks intended to keep file paths within `--cwd`: absolute paths and paths containing `..` are rejected
+- File tools require non-empty paths and perform basic `_local_path_error` checks intended to keep file paths within `--cwd`: absolute paths and paths containing `..` are rejected
 - These are basic lexical path checks rather than a complete filesystem sandbox.
   They do not resolve symlinks or interpret command-specific options such as
   `--file=/absolute/path`, scripts, or expressions. Choose the command allowlist
@@ -377,7 +377,8 @@ Notes:
 - Arguments are passed as a list, reducing shell injection risk.
 - Arguments are checked with `_local_path_error` by default, including decoded
   arguments and expanded glob matches. This also checks arguments used as flags
-  or text; empty arguments, absolute paths, and `..` path components are rejected.
+  or text; empty arguments are allowed, while absolute paths and `..` path
+  components are rejected.
 - Glob patterns may be expanded automatically relative to `--cwd`.
 - Quoted globs can be passed literally to prevent expansion.
 - Pipes and redirects are not allowed
