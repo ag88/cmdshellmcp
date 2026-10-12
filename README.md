@@ -622,3 +622,7 @@ This starts a server with a fixed working directory, bind host, port, authentica
 - Running a limited set of somewhat safe diagnostics
 
 This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
+
+---
+
+[![cmdshellmcp MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/ag88/cmdshellmcp/badges/card.svg)](https://glama.ai/mcp/servers/ag88/cmdshellmcp)
