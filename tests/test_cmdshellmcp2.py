@@ -39,11 +39,48 @@ class CmdshellTests(unittest.TestCase):
                 self.run.assert_not_called()
 
     def test_checks_arguments_after_decoding_and_unquoting(self):
-        for argument in ('"/tmp/file"', '"../file"', r"\x2ftmp/file", r"\x2e\x2e/file", "", '""'):
+        for argument in ('"/tmp/file"', '"../file"', r"\x2ftmp/file", r"\x2e\x2e/file"):
             with self.subTest(argument=argument):
                 response = cmdshellmcp2.cmdshell("echo", [argument])
                 self.assertTrue(response.startswith("Error:"), response)
                 self.run.assert_not_called()
+
+    def test_accepts_empty_arguments_after_decoding_and_unquoting(self):
+        for argument in ("", '""'):
+            with self.subTest(argument=argument):
+                self.assertEqual(cmdshellmcp2.cmdshell("echo", [argument]), "done")
+                self.assertEqual(self.run.call_args.args[0], ["echo", ""])
+
+    def test_pwd_accepts_empty_argument(self):
+        with mock.patch.object(cmdshellmcp2, "ALLOWED_COMMANDS", ["pwd"]):
+            self.assertEqual(cmdshellmcp2.cmdshell("pwd", [""]), "done")
+        self.assertEqual(self.run.call_args.args[0], ["pwd", ""])
+
+    def test_empty_arguments_still_require_configured_directory(self):
+        with mock.patch.object(cmdshellmcp2, "cwd", None):
+            response = cmdshellmcp2.cmdshell("echo", [""])
+        self.assertIn("current directory is not set", response)
+        self.run.assert_not_called()
+
+    def test_file_tools_require_non_empty_paths(self):
+        calls = (
+            (cmdshellmcp2.writeFile, ("", "text")),
+            (cmdshellmcp2.readFile, ("",)),
+            (cmdshellmcp2.listFiles, ("",)),
+            (cmdshellmcp2.copyFile, ("", "target")),
+            (cmdshellmcp2.copyFile, ("source", "")),
+            (cmdshellmcp2.moveRenameFile, ("", "target")),
+            (cmdshellmcp2.moveRenameFile, ("source", "")),
+            (cmdshellmcp2.deleteFile, ("",)),
+            (cmdshellmcp2.mkdir, ("",)),
+            (cmdshellmcp2.rmdir, ("",)),
+            (cmdshellmcp2.editFile, ("", "d")),
+            (cmdshellmcp2.applyPatch, ("", "diff")),
+        )
+        for tool, args in calls:
+            with self.subTest(tool=tool.__name__, args=args):
+                self.assertEqual(tool(*args), "Error: filename is required")
+        self.run.assert_not_called()
 
     def test_accepts_flags_text_and_local_paths(self):
         args = ["-n", "hello", "sub/file", ".", "file..txt"]
@@ -83,7 +120,9 @@ class CmdshellTests(unittest.TestCase):
         self.run.assert_not_called()
 
     def test_description_reports_effective_path_policy(self):
-        self.assertIn("Arguments are checked", cmdshellmcp2.cmdshell_description(["echo"]))
+        description = cmdshellmcp2.cmdshell_description(["echo"])
+        self.assertIn("Arguments are checked", description)
+        self.assertIn("empty arguments are allowed", description)
         cmdshellmcp2.SHELL_NO_PATH_CHECK = True
         self.assertIn("disabled by --shellnopathchk", cmdshellmcp2.cmdshell_description(["echo"]))
 
