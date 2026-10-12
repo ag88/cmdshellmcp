@@ -177,7 +177,7 @@ def _local_path_error(file: str, needfile: bool) -> Optional[str]:
         return "Error: the current directory is not set; report it to the user"
     if not file:
         if not needfile:
-            return ""
+            return None
         else:
             return "Error: filename is required"
     if file.startswith("/") or Path(file).is_absolute():
