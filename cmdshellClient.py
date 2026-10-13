@@ -21,7 +21,8 @@ def zip_filename(value: str) -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+            epilog=f"for specific command help, run with {sys.argv[0]} dlzip -h")
     commands = parser.add_subparsers(dest="command", required=True)
     dlzip = commands.add_parser("dlzip", help="download zip", description="download zip")
     dlzip.add_argument("filename", type=zip_filename, metavar="filename.zip")
