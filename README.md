@@ -604,7 +604,26 @@ python cmdshellmcp2.py \
 
 This starts a server with a fixed working directory, bind host, port, authentication, and a minimal command allowlist.
 
-## Command-line client
+## Notes
+
+- Default transport: `streamable-http`
+- Default host: `127.0.0.1`
+- Default port: `8003`
+- Default allowlist is built from a small set of somewhat safe commands
+
+## Typical use cases
+
+- Inspecting repository and filesystem state
+- Reading source files and logs
+- Writing small generated files or config changes
+- Making reviewable text substitutions with automatic backups
+- Applying small patches
+- Fetching documentation or data from the web
+- Running a limited set of somewhat safe diagnostics
+
+This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
+
+## Command-line client (companion app / util )
 
 `cmdshellClient.py` uses the same FastMCP dependency as the server. Its first
 command, `dlzip` (download zip), recursively calls `listFiles` and `readFile`
@@ -632,26 +651,6 @@ failures because the API returns errors as plain text. As `listFiles` separates
 names using newlines, filenames containing newlines cannot be represented
 reliably by this API. A download consists of sequential reads, so remote files
 should stay unchanged while it runs.
-
-
-## Notes
-
-- Default transport: `streamable-http`
-- Default host: `127.0.0.1`
-- Default port: `8003`
-- Default allowlist is built from a small set of somewhat safe commands
-
-## Typical use cases
-
-- Inspecting repository and filesystem state
-- Reading source files and logs
-- Writing small generated files or config changes
-- Making reviewable text substitutions with automatic backups
-- Applying small patches
-- Fetching documentation or data from the web
-- Running a limited set of somewhat safe diagnostics
-
-This server is best used when an AI agent needs controlled local access without being given unrestricted system commands.
 
 ---
 
