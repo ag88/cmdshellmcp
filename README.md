@@ -80,35 +80,6 @@ The `editFile` tool also requires GNU `sed` (including its `--sandbox` option)
 and `diff` to be installed on the server. These programs are invoked directly by
 the dedicated tool and do not need to appear in `allowed_commands`.
 
-## Command-line client
-
-`cmdshellClient.py` uses the same FastMCP dependency as the server. Its first
-command, `dlzip` (download zip), recursively calls `listFiles` and `readFile`
-starting at the server's configured working directory and packages the results
-into a local ZIP, preserving directory paths and empty directories.
-
-```bash
-python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp
-python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp --auth mytoken --overwrite
-```
-
-The positional arguments are the command, output filename (ending in `.zip`),
-and MCP endpoint URL. Use the server's actual port (default `8003`) in the URL.
-If `--auth` is omitted, the client prompts for a token without echoing it;
-press Enter to attempt an unauthenticated connection. `--auth ""` skips the
-prompt and attempts without authentication. `--overwrite` permits replacing an
-existing archive; otherwise existing files are preserved. The completed archive
-is published only after every read succeeds. Failures exit with a nonzero status
-and remove the temporary archive.
-
-The current `readFile` API supports **UTF-8 text only**. Binary or unreadable
-files abort the download; they are not silently skipped. Files beginning with
-`Error:` or the server's `Error reading file <path>:` message are also treated as
-failures because the API returns errors as plain text. As `listFiles` separates
-names using newlines, filenames containing newlines cannot be represented
-reliably by this API. A download consists of sequential reads, so remote files
-should stay unchanged while it runs.
-
 ## Configuration
 
 A configuration file is mandatory. The server selects one JSON file in this
@@ -632,6 +603,36 @@ python cmdshellmcp2.py \
 ```
 
 This starts a server with a fixed working directory, bind host, port, authentication, and a minimal command allowlist.
+
+## Command-line client
+
+`cmdshellClient.py` uses the same FastMCP dependency as the server. Its first
+command, `dlzip` (download zip), recursively calls `listFiles` and `readFile`
+starting at the server's configured working directory and packages the results
+into a local ZIP, preserving directory paths and empty directories.
+
+```bash
+python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp
+python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp --auth mytoken --overwrite
+```
+
+The positional arguments are the command, output filename (ending in `.zip`),
+and MCP endpoint URL. Use the server's actual port (default `8003`) in the URL.
+If `--auth` is omitted, the client prompts for a token without echoing it;
+press Enter to attempt an unauthenticated connection. `--auth ""` skips the
+prompt and attempts without authentication. `--overwrite` permits replacing an
+existing archive; otherwise existing files are preserved. The completed archive
+is published only after every read succeeds. Failures exit with a nonzero status
+and remove the temporary archive.
+
+The current `readFile` API supports **UTF-8 text only**. Binary or unreadable
+files abort the download; they are not silently skipped. Files beginning with
+`Error:` or the server's `Error reading file <path>:` message are also treated as
+failures because the API returns errors as plain text. As `listFiles` separates
+names using newlines, filenames containing newlines cannot be represented
+reliably by this API. A download consists of sequential reads, so remote files
+should stay unchanged while it runs.
+
 
 ## Notes
 
