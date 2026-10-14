@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download a cmdshellmcp server's text files into a local ZIP archive."""
+"""Access cmdshellmcp file tools and download text files into a local ZIP archive."""
 
 import argparse
 import asyncio
@@ -28,11 +28,42 @@ def build_parser() -> argparse.ArgumentParser:
             e.g. {sys.argv[0]} dlzip -h
             """)
     commands = parser.add_subparsers(dest="command", required=True)
-    dlzip = commands.add_parser("dlzip", help="download zip", description="download zip")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--auth", metavar="auth_token", help="bearer token (prompt if omitted)")
+    dlzip = commands.add_parser("dlzip", parents=[common], help="download zip", description="download zip")
     dlzip.add_argument("filename", type=zip_filename, metavar="filename.zip")
     dlzip.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
     dlzip.add_argument("--overwrite", action="store_true", help="overwrite filename.zip")
-    dlzip.add_argument("--auth", metavar="auth_token", help="bearer token (prompt if omitted)")
+    descriptions = {
+        "listFiles": "list remote directory entries",
+        "readFile": "read a remote UTF-8 text file",
+        "writeFile": "write text to a remote file",
+        "mkdir": "create a remote directory",
+        "rmdir": "remove an empty remote directory",
+        "deleteFile": "delete a remote file",
+        "copyFile": "copy a remote file",
+        "moveRenameFile": "move or rename a remote file",
+    }
+    for name, description in descriptions.items():
+        command = commands.add_parser(name, parents=[common], help=description, description=description)
+        command.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
+        if name == "listFiles":
+            command.add_argument("path", metavar="dir", nargs="?", default=".")
+        elif name in ("mkdir", "rmdir"):
+            command.add_argument("path", metavar="dir")
+        elif name in ("copyFile", "moveRenameFile"):
+            command.add_argument("source", help="remote source file")
+            command.add_argument("destination", help="remote destination file")
+        else:
+            command.add_argument("file", help="remote file")
+        if name == "readFile":
+            command.add_argument("--out", type=lambda value: Path(value).expanduser(), metavar="filename",
+                                 help="save locally instead of stdout; must not already exist")
+        elif name == "writeFile":
+            command.add_argument("--in", dest="input_file", type=lambda value: Path(value).expanduser(),
+                                 metavar="filename", help="read local UTF-8 text instead of stdin")
+            command.add_argument("--append", action="store_true", help="append to the remote file")
+            command.add_argument("--newline", action="store_true", help="add a trailing newline")
     return parser
 
 
@@ -95,23 +126,61 @@ async def download_zip(filename: Path, url: str, auth: str | None, overwrite: bo
             temporary.unlink(missing_ok=True)
 
 
+async def run_file_tool(args: argparse.Namespace, token: str | None) -> None:
+    if args.command in ("listFiles", "mkdir", "rmdir"):
+        arguments = {"path": args.path}
+    elif args.command in ("copyFile", "moveRenameFile"):
+        arguments = {"source": args.source, "destination": args.destination}
+    else:
+        arguments = {"file": args.file}
+    if args.command == "writeFile":
+        text = args.input_file.read_text(encoding="utf-8") if args.input_file else sys.stdin.read()
+        arguments.update(text=text, append=args.append, newline=args.newline)
+    async with Client(args.url, auth=token or None) as client:
+        text = await call_text(client, args.command, arguments)
+    if args.command == "readFile":
+        error_prefixes = ("Error:", f"Error reading file {args.file}:")
+    elif args.command == "listFiles":
+        error_prefixes = ("Error:", "Error listing files ")
+    else:
+        error_prefixes = ("Error:", "Error ")
+    if text.startswith(error_prefixes):
+        raise RuntimeError(text)
+    if args.command == "readFile":
+        if args.out is None:
+            sys.stdout.write(text)
+        else:
+            # Exclusive creation also protects a file created during the MCP call.
+            with args.out.open("xb") as output:
+                output.write(text.encode("utf-8"))
+            print(f"Output written to {args.out}")
+    else:
+        print(text)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        if not args.overwrite and os.path.lexists(args.filename):
+        if args.command == "dlzip" and not args.overwrite and os.path.lexists(args.filename):
             raise FileExistsError(f"{args.filename} already exists; use --overwrite to replace it")
+        if args.command == "readFile" and args.out is not None and os.path.lexists(args.out):
+            raise FileExistsError(f"{args.out} already exists")
         token = args.auth
         if token is None:
-            print("note: auth token input is not displayed / echoed")
+            print("note: auth token input is not displayed / echoed", file=sys.stderr)
             token = getpass.getpass("Auth token (Enter for no authentication): ")
-        count = asyncio.run(download_zip(args.filename, args.url, token, args.overwrite))
+        if args.command == "dlzip":
+            count = asyncio.run(download_zip(args.filename, args.url, token, args.overwrite))
+            print(f"Downloaded {count} file(s) to {args.filename}")
+        else:
+            asyncio.run(run_file_tool(args, token))
     except (KeyboardInterrupt, EOFError):
-        print("Download cancelled.", file=sys.stderr)
+        print("Download cancelled." if args.command == "dlzip" else "Command cancelled.", file=sys.stderr)
         return 1
     except Exception as exc:
-        print(f"Download failed: {exc}", file=sys.stderr)
+        label = "Download" if args.command == "dlzip" else args.command
+        print(f"{label} failed: {exc}", file=sys.stderr)
         return 1
-    print(f"Downloaded {count} file(s) to {args.filename}")
     return 0
 
 

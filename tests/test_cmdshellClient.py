@@ -123,5 +123,144 @@ class CommandLineTests(unittest.TestCase):
         self.assertIn("read failed", stderr.getvalue())
 
 
+class FileToolTests(unittest.TestCase):
+    url = "http://localhost:8003/mcp"
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.remote = self.root / "remote"
+        self.remote.mkdir()
+        cwd = mock.patch.object(cmdshellmcp2, "cwd", self.remote)
+        cwd.start()
+        self.addCleanup(cwd.stop)
+        audit = mock.patch.object(cmdshellmcp2, "audit")
+        audit.start()
+        self.addCleanup(audit.stop)
+        self.server = cmdshellmcp2.create_server(["date"], "")
+        factory = mock.patch.object(cmdshellClient, "Client", side_effect=lambda *a, **kw: Client(self.server))
+        self.factory = factory.start()
+        self.addCleanup(factory.stop)
+
+    def run_command(self, command, *arguments, stdin=""):
+        with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr, mock.patch.object(cmdshellClient.sys, "stdin", io.StringIO(stdin)):
+            status = cmdshellClient.main([command, self.url, *arguments, "--auth", "token"])
+        self.factory.assert_called_with(self.url, auth="token")
+        return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_list_default_and_explicit_directory(self):
+        (self.remote / "src").mkdir()
+        (self.remote / "src" / "a.txt").touch()
+        self.assertEqual(self.run_command("listFiles"), (0, "src/\n", ""))
+        self.assertEqual(self.run_command("listFiles", "src"), (0, "a.txt\n", ""))
+
+    def test_read_stdout_and_local_output_preserve_text(self):
+        text = "héllo 世界\nlast line"
+        (self.remote / "a.txt").write_text(text, encoding="utf-8")
+        self.assertEqual(self.run_command("readFile", "a.txt"), (0, text, ""))
+        output = self.root / "local.txt"
+        self.assertEqual(self.run_command("readFile", "a.txt", "--out", str(output)),
+                         (0, f"Output written to {output}\n", ""))
+        self.assertEqual(output.read_bytes(), text.encode("utf-8"))
+
+    def test_existing_output_is_rejected_before_auth_or_network(self):
+        output = self.root / "local.txt"
+        output.write_text("keep me")
+        with mock.patch.object(cmdshellClient.getpass, "getpass") as prompt, redirect_stderr(io.StringIO()) as stderr:
+            status = cmdshellClient.main(["readFile", self.url, "a.txt", "--out", str(output)])
+        self.assertEqual(status, 1)
+        self.assertIn("already exists", stderr.getvalue())
+        self.assertEqual(output.read_text(), "keep me")
+        prompt.assert_not_called()
+        self.factory.assert_not_called()
+
+    def test_concurrently_created_output_is_preserved(self):
+        output = self.root / "local.txt"
+        self.server = cmdshellmcp2.create_server(["date"], "", disable_tools=["readFile"])
+
+        @self.server.tool(name="readFile")
+        def concurrent_creation(file: str) -> str:
+            output.write_text("keep me")
+            return "remote text"
+
+        status, stdout, stderr = self.run_command("readFile", "a.txt", "--out", str(output))
+        self.assertEqual(status, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("failed", stderr)
+        self.assertEqual(output.read_text(), "keep me")
+
+    def test_write_stdin_replaces_and_flags_append_newline(self):
+        target = self.remote / "a.txt"
+        target.write_text("old text")
+        self.assertEqual(self.run_command("writeFile", "a.txt", stdin="first")[0], 0)
+        self.assertEqual(target.read_text(), "first")
+        self.assertEqual(self.run_command("writeFile", "a.txt", "--append", "--newline", stdin=" second")[0], 0)
+        self.assertEqual(target.read_text(), "first second\n")
+
+    def test_write_local_file_does_not_read_stdin(self):
+        source = self.root / "input.txt"
+        source.write_text("héllo 世界", encoding="utf-8")
+        status, stdout, stderr = self.run_command("writeFile", "a.txt", "--in", str(source), stdin="ignored")
+        self.assertEqual(status, 0, stderr)
+        self.assertIn("Success:", stdout)
+        self.assertEqual((self.remote / "a.txt").read_text(encoding="utf-8"), "héllo 世界")
+
+    def test_directory_copy_move_delete_lifecycle(self):
+        (self.remote / "original.txt").write_text("content")
+        for command, arguments in (
+            ("mkdir", ["drafts"]),
+            ("copyFile", ["original.txt", "drafts/copy.txt"]),
+            ("moveRenameFile", ["drafts/copy.txt", "drafts/final.txt"]),
+        ):
+            status, stdout, stderr = self.run_command(command, *arguments)
+            self.assertEqual(status, 0, stderr)
+            self.assertIn("Success:", stdout)
+        self.assertEqual((self.remote / "drafts/final.txt").read_text(), "content")
+        self.assertFalse((self.remote / "drafts/copy.txt").exists())
+        self.assertEqual(self.run_command("deleteFile", "drafts/final.txt")[0], 0)
+        self.assertEqual(self.run_command("rmdir", "drafts")[0], 0)
+        self.assertFalse((self.remote / "drafts").exists())
+        self.assertTrue((self.remote / "original.txt").exists())
+
+    def test_tool_errors_return_nonzero_and_do_not_create_output(self):
+        output = self.root / "local.txt"
+        for command, arguments in (
+            ("readFile", ["missing.txt", "--out", str(output)]),
+            ("listFiles", ["missing"]),
+            ("writeFile", ["missing/a.txt"]),
+            ("mkdir", ["missing/sub"]),
+            ("rmdir", ["missing"]),
+            ("deleteFile", ["missing.txt"]),
+            ("copyFile", ["missing.txt", "other.txt"]),
+            ("moveRenameFile", ["missing.txt", "other.txt"]),
+        ):
+            with self.subTest(command=command):
+                status, stdout, stderr = self.run_command(command, *arguments)
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout, "")
+                self.assertIn("failed", stderr)
+                self.assertFalse(output.exists())
+
+    def test_required_arguments_and_auth_prompt_for_every_command(self):
+        for command, arguments in (
+            ("listFiles", []), ("readFile", ["a.txt"]), ("writeFile", ["a.txt"]),
+            ("mkdir", ["dir"]), ("rmdir", ["dir"]), ("deleteFile", ["a.txt"]),
+            ("copyFile", ["a.txt", "b.txt"]), ("moveRenameFile", ["a.txt", "b.txt"]),
+        ):
+            with self.subTest(command=command):
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    cmdshellClient.build_parser().parse_args([command])
+                if arguments:
+                    with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                        cmdshellClient.build_parser().parse_args([command, self.url, *arguments[:-1]])
+                with mock.patch.object(cmdshellClient, "run_file_tool", new_callable=mock.AsyncMock) as run, mock.patch.object(cmdshellClient.getpass, "getpass", return_value="") as prompt, redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(cmdshellClient.main([command, self.url, *arguments]), 0)
+                prompt.assert_called_once()
+                self.assertEqual(run.await_args.args[1], "")
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("not displayed / echoed", stderr.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

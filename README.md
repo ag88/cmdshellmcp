@@ -625,8 +625,11 @@ This server is best used when an AI agent needs controlled local access without 
 
 ## Command-line client (companion app / util )
 
-`cmdshellClient.py` uses the same FastMCP dependency as the server. Its first
-command, `dlzip` (download zip), recursively calls `listFiles` and `readFile`
+`cmdshellClient.py` uses the same FastMCP dependency as the server. Run
+`python cmdshellClient.py -h` for the command list, or
+`python cmdshellClient.py COMMAND -h` for a command's arguments.
+
+The `dlzip` command (download zip) recursively calls `listFiles` and `readFile`
 starting at the server's configured working directory and packages the results
 into a local ZIP, preserving directory paths and empty directories.
 
@@ -637,7 +640,8 @@ python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8003/mcp --auth myt
 
 The positional arguments are the command, output filename (ending in `.zip`),
 and MCP endpoint URL. Use the server's actual port (default `8003`) in the URL.
-If `--auth` is omitted, the client prompts for a token without echoing it;
+All commands accept `--auth auth_token`. If `--auth` is omitted, the client
+prompts for a token without echoing it;
 press Enter to attempt an unauthenticated connection. `--auth ""` skips the
 prompt and attempts without authentication. `--overwrite` permits replacing an
 existing archive; otherwise existing files are preserved. The completed archive
@@ -651,6 +655,47 @@ failures because the API returns errors as plain text. As `listFiles` separates
 names using newlines, filenames containing newlines cannot be represented
 reliably by this API. A download consists of sequential reads, so remote files
 should stay unchanged while it runs.
+
+### File tool commands
+
+For these commands, the URL is the first positional argument **after the command**.
+Remote file and directory paths are relative to the server's configured working
+directory. `--in` and `--out` refer to files on the client machine.
+
+| Command syntax | Behavior |
+| --- | --- |
+| `listFiles URL [dir]` | Call `listFiles` and print entries to stdout; `dir` defaults to `.`. |
+| `readFile URL file [--out filename]` | Print the UTF-8 text to stdout exactly as returned, or save it locally and print `Output written to filename`. An existing output file is an error and is never overwritten. |
+| `writeFile URL file [--in filename] [--append] [--newline]` | Read text from stdin or a local UTF-8 file, then call `writeFile`. `--append` appends instead of replacing the remote file; `--newline` adds a trailing newline. Both flags default to false and are passed to the tool. |
+| `mkdir URL dir` | Create a remote directory. Its parent must already exist. |
+| `rmdir URL dir` | Remove an empty remote directory. |
+| `deleteFile URL file` | Delete a remote file. |
+| `copyFile URL source destination` | Copy a remote file. |
+| `moveRenameFile URL source destination` | Move or rename a remote file. |
+
+Examples (each command also accepts `--auth mytoken`):
+
+```bash
+python cmdshellClient.py listFiles http://127.0.0.1:8003/mcp
+python cmdshellClient.py listFiles http://127.0.0.1:8003/mcp src
+python cmdshellClient.py readFile http://127.0.0.1:8003/mcp notes.txt
+python cmdshellClient.py readFile http://127.0.0.1:8003/mcp notes.txt --out local-notes.txt
+python cmdshellClient.py writeFile http://127.0.0.1:8003/mcp notes.txt --in local-notes.txt
+printf 'another line' | python cmdshellClient.py writeFile http://127.0.0.1:8003/mcp notes.txt --append --newline --auth mytoken
+python cmdshellClient.py mkdir http://127.0.0.1:8003/mcp drafts
+python cmdshellClient.py copyFile http://127.0.0.1:8003/mcp notes.txt drafts/notes.txt
+python cmdshellClient.py moveRenameFile http://127.0.0.1:8003/mcp drafts/notes.txt drafts/final.txt
+python cmdshellClient.py deleteFile http://127.0.0.1:8003/mcp drafts/final.txt
+python cmdshellClient.py rmdir http://127.0.0.1:8003/mcp drafts
+```
+
+For piped input, supply `--auth mytoken` (or `--auth ""` for an unauthenticated
+server) so token entry does not consume stdin when no terminal is available.
+Authentication notes and failures go to stderr, keeping stdout usable for
+redirection. File mutation commands print the server's status message. Tool
+errors exit with a nonzero status. The UTF-8 and plain-text error limitations
+described above also apply to the individual file tools. Commands require their
+corresponding tools to be enabled on the server.
 
 ---
 
