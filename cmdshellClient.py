@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     dlzip = commands.add_parser("dlzip", help="download zip", description="download zip")
     dlzip.add_argument("filename", type=zip_filename, metavar="filename.zip")
-    dlzip.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8080/mcp")
+    dlzip.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
     dlzip.add_argument("--overwrite", action="store_true", help="overwrite filename.zip")
     dlzip.add_argument("--auth", metavar="auth_token", help="bearer token (prompt if omitted)")
     return parser
