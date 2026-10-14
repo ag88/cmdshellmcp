@@ -102,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             raise FileExistsError(f"{args.filename} already exists; use --overwrite to replace it")
         token = args.auth
         if token is None:
+            print("note: auth token input is not displayed / echoed")
             token = getpass.getpass("Auth token (Enter for no authentication): ")
         count = asyncio.run(download_zip(args.filename, args.url, token, args.overwrite))
     except (KeyboardInterrupt, EOFError):

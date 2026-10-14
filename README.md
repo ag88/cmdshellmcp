@@ -631,8 +631,8 @@ starting at the server's configured working directory and packages the results
 into a local ZIP, preserving directory paths and empty directories.
 
 ```bash
-python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp
-python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8080/mcp --auth mytoken --overwrite
+python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8003/mcp
+python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8003/mcp --auth mytoken --overwrite
 ```
 
 The positional arguments are the command, output filename (ending in `.zip`),
