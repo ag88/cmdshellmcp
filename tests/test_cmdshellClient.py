@@ -278,6 +278,74 @@ class FileToolTests(unittest.TestCase):
         self.assertFalse((self.remote / "drafts").exists())
         self.assertTrue((self.remote / "original.txt").exists())
 
+    def test_edit_requires_script_before_authentication(self):
+        with mock.patch.object(cmdshellClient.getpass, "getpass") as prompt, redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit) as raised:
+            cmdshellClient.main(["editFile", self.url, "a.txt"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("requires -e", stderr.getvalue())
+        prompt.assert_not_called()
+        self.factory.assert_not_called()
+
+    def test_edit_expression_and_script_file_precedence(self):
+        target = self.remote / "a.txt"
+        target.write_text("old\n")
+        with mock.patch.object(cmdshellClient, "call_text", wraps=cmdshellClient.call_text) as call:
+            status, stdout, stderr = self.run_command("editFile", "a.txt", "-e", "s/old/new/")
+        self.assertEqual(status, 0, stderr)
+        self.assertIn("Success:", stdout)
+        self.assertEqual(target.read_text(), "new\n")
+        self.assertEqual(call.call_args.args[2], {"file": "a.txt", "script": "s/old/new/", "args": None})
+        script_file = self.root / "edit.sed"
+        script_file.write_text("s/(new)/updated/\n", encoding="utf-8")
+        with mock.patch.object(cmdshellClient, "call_text", wraps=cmdshellClient.call_text) as call:
+            status, stdout, stderr = self.run_command("editFile", "a.txt", "-e", "ignored invalid script", "-f", str(script_file), "--args=-E")
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(target.read_text(), "updated\n")
+        self.assertEqual(call.call_args.args[2], {"file": "a.txt", "script": "s/(new)/updated/\n", "args": ["-E"]})
+
+    def test_apply_patch_default_and_explicit_options(self):
+        target = self.remote / "a.txt"
+        diff_file = self.root / "changes.diff"
+        diff = "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n"
+        diff_file.write_text(diff, encoding="utf-8")
+        for options, pnum, tool_args in (([], 2, None), (["--pnum", "1", "--args=--batch --verbose"], 1, ["--batch", "--verbose"])):
+            with self.subTest(options=options):
+                target.write_text("old\n")
+                with mock.patch.object(cmdshellClient, "call_text", wraps=cmdshellClient.call_text) as call:
+                    status, stdout, stderr = self.run_command("applyPatch", "a.txt", str(diff_file), *options)
+                self.assertEqual(status, 0, stderr)
+                self.assertIn("Hunk #1 succeeded", stdout)
+                self.assertEqual(target.read_text(), "new\n")
+                self.assertEqual(call.call_args.args[2], {"file": "a.txt", "diff": diff, "pnum": pnum, "args": tool_args})
+
+    def test_edit_and_patch_local_read_failures_do_not_connect(self):
+        for command, arguments in (("editFile", ["a.txt", "-e", "s/old/new/", "-f", str(self.root / "missing.sed")]),
+                                   ("applyPatch", ["a.txt", str(self.root / "missing.diff")])):
+            with self.subTest(command=command), redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(cmdshellClient.main([command, self.url, *arguments, "--auth", ""]), 1)
+                self.assertIn("failed", stderr.getvalue())
+        self.factory.assert_not_called()
+
+    def test_edit_and_patch_server_rejections_and_invalid_args(self):
+        target = self.remote / "a.txt"
+        target.write_text("old\n")
+        diff_file = self.root / "changes.diff"
+        diff_file.write_text("--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n")
+        for command, arguments in (("editFile", ["a.txt", "-e", "s/old/new/", "--args=-i"]),
+                                   ("applyPatch", ["a.txt", str(diff_file), "--args=--output=elsewhere"])):
+            with self.subTest(command=command):
+                status, stdout, stderr = self.run_command(command, *arguments)
+                self.assertEqual(status, 1)
+                self.assertEqual(stdout, "")
+                self.assertIn("not allowed", stderr)
+                self.assertEqual(target.read_text(), "old\n")
+        for arguments in (["applyPatch", self.url, "a.txt"],
+                          ["applyPatch", self.url, "a.txt", "diff", "--pnum", "not-an-int"],
+                          ["editFile", self.url, "a.txt", "-e", "s/old/new/", "--args=\"unterminated"]):
+            with self.subTest(arguments=arguments), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                cmdshellClient.main(arguments)
+            self.assertEqual(raised.exception.code, 2)
+
     def test_tool_errors_return_nonzero_and_do_not_create_output(self):
         output = self.root / "local.txt"
         for command, arguments in (
@@ -300,6 +368,7 @@ class FileToolTests(unittest.TestCase):
     def test_required_arguments_and_auth_prompt_for_every_command(self):
         for command, arguments in (
             ("listFiles", []), ("readFile", ["a.txt"]), ("writeFile", ["a.txt"]),
+            ("editFile", ["a.txt", "-e", "s/old/new/"]), ("applyPatch", ["a.txt", "changes.diff"]),
             ("mkdir", ["dir"]), ("rmdir", ["dir"]), ("deleteFile", ["a.txt"]),
             ("copyFile", ["a.txt", "b.txt"]), ("moveRenameFile", ["a.txt", "b.txt"]),
         ):
