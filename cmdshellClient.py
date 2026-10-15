@@ -57,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
         "listFiles": "list remote directory entries",
         "readFile": "read a remote UTF-8 text file",
         "writeFile": "write text to a remote file",
+        "editFile": "edit a remote text file using a sed script",
+        "applyPatch": "apply a local diff to a remote file",
         "mkdir": "create a remote directory",
         "rmdir": "remove an empty remote directory",
         "deleteFile": "delete a remote file",
@@ -83,6 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
                                  metavar="filename", help="read local UTF-8 text instead of stdin")
             command.add_argument("--append", action="store_true", help="append to the remote file")
             command.add_argument("--newline", action="store_true", help="add a trailing newline")
+        elif name == "editFile":
+            command.add_argument("-e", dest="expression", metavar='"script expression"',
+                                 help="quoted sed script expression; required unless -f is given")
+            command.add_argument("-f", dest="script_file", type=lambda value: Path(value).expanduser(),
+                                 help="local UTF-8 sed script file; takes precedence over -e")
+        elif name == "applyPatch":
+            command.add_argument("diff_file", type=lambda value: Path(value).expanduser(),
+                                 help="local UTF-8 diff file (normally unified diff)")
+            command.add_argument("--pnum", type=int, default=2, help="patch strip count (default: 2)")
+        if name in ("editFile", "applyPatch"):
+            command.add_argument("--args", dest="tool_args", type=shlex.split, default=None,
+                                 metavar='"options"', help='quoted tool options, e.g. --args="-s"; default: None')
     return parser
 
 
@@ -165,6 +179,11 @@ async def run_file_tool(args: argparse.Namespace, token: str | None) -> None:
     if args.command == "writeFile":
         text = args.input_file.read_text(encoding="utf-8") if args.input_file else sys.stdin.read()
         arguments.update(text=text, append=args.append, newline=args.newline)
+    elif args.command == "editFile":
+        script = args.script_file.read_text(encoding="utf-8") if args.script_file is not None else args.expression
+        arguments.update(script=script, args=args.tool_args)
+    elif args.command == "applyPatch":
+        arguments.update(diff=args.diff_file.read_text(encoding="utf-8"), pnum=args.pnum, args=args.tool_args)
     async with Client(args.url, auth=token or None) as client:
         text = await call_text(client, args.command, arguments)
     if args.command == "readFile":
@@ -188,7 +207,10 @@ async def run_file_tool(args: argparse.Namespace, token: str | None) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command == "editFile" and args.expression is None and args.script_file is None:
+        parser.error("editFile requires -e \"script expression\" or -f script_file")
     try:
         if args.command == "dlzip" and not args.overwrite and os.path.lexists(args.filename):
             raise FileExistsError(f"{args.filename} already exists; use --overwrite to replace it")

@@ -703,6 +703,8 @@ directory. `--in` and `--out` refer to files on the client machine.
 | `listFiles URL [dir]` | Call `listFiles` and print entries to stdout; `dir` defaults to `.`. |
 | `readFile URL file [--out filename]` | Print the UTF-8 text to stdout exactly as returned, or save it locally and print `Output written to filename`. An existing output file is an error and is never overwritten. |
 | `writeFile URL file [--in filename] [--append] [--newline]` | Read text from stdin or a local UTF-8 file, then call `writeFile`. `--append` appends instead of replacing the remote file; `--newline` adds a trailing newline. Both flags default to false and are passed to the tool. |
+| `editFile URL file [-e "script expression"] [-f script_file] [--args="options"]` | Edit a remote file using a quoted sed expression or a local UTF-8 script file. At least one of `-e` or `-f` is required; when both are given, `-f` takes precedence and `-e` is ignored. |
+| `applyPatch URL file diff_file [--pnum 2] [--args="options"]` | Read a local UTF-8 diff file and pass its contents to `applyPatch` for the named remote file. All three positional arguments are required; `--pnum` defaults to `2`. |
 | `mkdir URL dir` | Create a remote directory. Its parent must already exist. |
 | `rmdir URL dir` | Remove an empty remote directory. |
 | `deleteFile URL file` | Delete a remote file. |
@@ -717,6 +719,9 @@ python cmdshellClient.py listFiles http://127.0.0.1:8003/mcp src
 python cmdshellClient.py readFile http://127.0.0.1:8003/mcp notes.txt
 python cmdshellClient.py readFile http://127.0.0.1:8003/mcp notes.txt --out local-notes.txt
 python cmdshellClient.py writeFile http://127.0.0.1:8003/mcp notes.txt --in local-notes.txt
+python cmdshellClient.py editFile http://127.0.0.1:8003/mcp notes.txt -e "s/old/new/g" --auth mytoken
+python cmdshellClient.py editFile http://127.0.0.1:8003/mcp notes.txt -f edits.sed --args="-E" --auth mytoken
+python cmdshellClient.py applyPatch http://127.0.0.1:8003/mcp notes.txt changes.diff --pnum 1 --args="--batch --verbose" --auth mytoken
 printf 'another line' | python cmdshellClient.py writeFile http://127.0.0.1:8003/mcp notes.txt --append --newline --auth mytoken
 python cmdshellClient.py mkdir http://127.0.0.1:8003/mcp drafts
 python cmdshellClient.py copyFile http://127.0.0.1:8003/mcp notes.txt drafts/notes.txt
@@ -724,6 +729,20 @@ python cmdshellClient.py moveRenameFile http://127.0.0.1:8003/mcp drafts/notes.t
 python cmdshellClient.py deleteFile http://127.0.0.1:8003/mcp drafts/final.txt
 python cmdshellClient.py rmdir http://127.0.0.1:8003/mcp drafts
 ```
+
+For `editFile`, **quote the entire `-e` script expression as one argument**.
+`-f script_file` reads the script on the client and sends its contents as the
+tool's `script`; the script filename is not sent to the server. If both `-f`
+and `-e` are supplied, failure to read the script file is an error, with no
+fallback to `-e`. Likewise, `applyPatch` reads `diff_file` on the client and sends
+its contents as `diff`, together with `pnum` and `args`.
+
+Both commands accept `--args="options"`, a single quoted string tokenized with
+`shlex.split()` into the tool's argument list; omitted `--args` passes `None`.
+Use the equals form for options beginning with `-`, such as `--args="-n -E"`
+for sed or `--args="--batch --verbose"` for patch. The server still validates
+which options are allowed. `editFile` uses the server's existing backup/diff
+behavior; `applyPatch` uses the server's patch behavior.
 
 Authentication setup is the same, If `--auth` is specified, it uses it for the `auth token`, otherwise it fallsback to `CSMCP_AUTH_TOKEN` environment variable, if it isn't set
 the client prompts for a token without echoing it; press Enter to attempt an unauthenticated connection. --auth "" skips the prompt
