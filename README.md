@@ -640,13 +640,18 @@ python cmdshellClient.py dlzip filename.zip http://127.0.0.1:8003/mcp --auth myt
 
 The positional arguments are the command, output filename (ending in `.zip`),
 and MCP endpoint URL. Use the server's actual port (default `8003`) in the URL.
-All commands accept `--auth auth_token`. If `--auth` is omitted, the client
-prompts for a token without echoing it;
+
+All commands accept `--auth auth_token` for Bearer authentication `Authorization: Bearer auth_token`
+(also called an api key) to authenticate with the MCP server.
+
+If `--auth` is omitted, it fallbacks to `CSMCP_AUTH_TOKEN` environment variable, if it isn't set
+the client prompts for a token without echoing it;
 press Enter to attempt an unauthenticated connection. `--auth ""` skips the
-prompt and attempts without authentication. `--overwrite` permits replacing an
-existing archive; otherwise existing files are preserved. The completed archive
-is published only after every read succeeds. Failures exit with a nonzero status
-and remove the temporary archive.
+prompt and attempts without authentication.
+
+`--overwrite` permits replacing an existing archive; otherwise existing files are preserved. 
+The completed archive is published only after every read succeeds. Failures exit with a nonzero
+ status and remove the temporary archive.
 
 The current `readFile` API supports **UTF-8 text only**. Binary or unreadable
 files abort the download; they are not silently skipped. Files beginning with
@@ -688,6 +693,10 @@ python cmdshellClient.py moveRenameFile http://127.0.0.1:8003/mcp drafts/notes.t
 python cmdshellClient.py deleteFile http://127.0.0.1:8003/mcp drafts/final.txt
 python cmdshellClient.py rmdir http://127.0.0.1:8003/mcp drafts
 ```
+
+Authentication setup is the same, if `--auth` is omitted, it fallbacks to `CSMCP_AUTH_TOKEN` environment variable, if it isn't set
+the client prompts for a token without echoing it; press Enter to attempt an unauthenticated connection. --auth "" skips the prompt
+ and attempts without authentication.
 
 For piped input, supply `--auth mytoken` (or `--auth ""` for an unauthenticated
 server) so token entry does not consume stdin when no terminal is available.

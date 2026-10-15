@@ -29,7 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
             """)
     commands = parser.add_subparsers(dest="command", required=True)
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--auth", metavar="auth_token", help="bearer token (prompt if omitted)")
+    common.add_argument("--auth", metavar="auth_token",
+        help="bearer token, you can also set env var CSMCP_AUTH_TOKEN for the auth token, otherwise prompt if omitted")
     dlzip = commands.add_parser("dlzip", parents=[common], help="download zip", description="download zip")
     dlzip.add_argument("filename", type=zip_filename, metavar="filename.zip")
     dlzip.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
@@ -167,8 +168,12 @@ def main(argv: list[str] | None = None) -> int:
             raise FileExistsError(f"{args.out} already exists")
         token = args.auth
         if token is None:
-            print("note: auth token input is not displayed / echoed", file=sys.stderr)
-            token = getpass.getpass("Auth token (Enter for no authentication): ")
+            if "CSMCP_AUTH_TOKEN" in os.environ:
+                token = os.environ["CSMCP_AUTH_TOKEN"]
+            else:
+                print("note: auth token input is not displayed / echoed", file=sys.stderr)
+                token = getpass.getpass("Auth token (Enter for no authentication): ")
+
         if args.command == "dlzip":
             count = asyncio.run(download_zip(args.filename, args.url, token, args.overwrite))
             print(f"Downloaded {count} file(s) to {args.filename}")
