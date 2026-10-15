@@ -100,6 +100,42 @@ class DownloadTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CommandLineTests(unittest.TestCase):
+    def test_cmdshell_help_order_and_quoted_command_requirement(self):
+        help_text = cmdshellClient.build_parser().format_help()
+        self.assertIn("dlzip,cmdshell,listFiles", help_text)
+        with redirect_stdout(io.StringIO()) as stdout, self.assertRaises(SystemExit) as raised:
+            cmdshellClient.build_parser().parse_args(["cmdshell", "-h"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("ONE quoted string after URL", " ".join(stdout.getvalue().split()))
+        self.assertIn("--auth", stdout.getvalue())
+
+    def test_cmdshell_rejects_missing_empty_malformed_or_unquoted_commands(self):
+        for arguments in ([], ["http://localhost/mcp"], ["http://localhost/mcp", ""],
+                          ["http://localhost/mcp", "   "], ["http://localhost/mcp", "''"],
+                          ["http://localhost/mcp", "echo 'unterminated"],
+                          ["http://localhost/mcp", "ls", "-la"]):
+            with self.subTest(arguments=arguments), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                cmdshellClient.build_parser().parse_args(["cmdshell", *arguments])
+            self.assertEqual(raised.exception.code, 2)
+
+    def test_cmdshell_auth_argument_environment_and_prompt(self):
+        for explicit, environment, prompted, expected in (
+            ("provided", {"CSMCP_AUTH_TOKEN": "env-token"}, None, "provided"),
+            ("", {"CSMCP_AUTH_TOKEN": "env-token"}, None, ""),
+            (None, {"CSMCP_AUTH_TOKEN": "env-token"}, None, "env-token"),
+            (None, {}, "prompt-token", "prompt-token"),
+            (None, {}, "", ""),
+        ):
+            with self.subTest(explicit=explicit, environment=environment, prompted=prompted):
+                arguments = ["cmdshell", "http://localhost/mcp", "ls -la"]
+                if explicit is not None:
+                    arguments += ["--auth", explicit]
+                with mock.patch.dict(cmdshellClient.os.environ, environment, clear=True), mock.patch.object(cmdshellClient.getpass, "getpass", return_value=prompted) as prompt, mock.patch.object(cmdshellClient, "run_cmdshell", new_callable=mock.AsyncMock) as run, redirect_stderr(io.StringIO()):
+                    self.assertEqual(cmdshellClient.main(arguments), 0)
+                self.assertEqual(run.await_args.args[0].remote_command, ["ls", "-la"])
+                self.assertEqual(run.await_args.args[1], expected)
+                self.assertEqual(prompt.call_count, int(prompted is not None))
+
     def test_parser_requires_command_filename_and_url(self):
         for args in ([], ["other"], ["dlzip"], ["dlzip", "file.zip"], ["dlzip", "file.txt", "http://localhost/mcp"]):
             with self.subTest(args=args), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
@@ -154,6 +190,25 @@ class FileToolTests(unittest.TestCase):
         (self.remote / "src" / "a.txt").touch()
         self.assertEqual(self.run_command("listFiles"), (0, "src/\n", ""))
         self.assertEqual(self.run_command("listFiles", "src"), (0, "a.txt\n", ""))
+
+    def test_cmdshell_tokenizes_and_preserves_quoted_and_empty_arguments(self):
+        with mock.patch.object(cmdshellmcp2, "ALLOWED_COMMANDS", ["echo"]), mock.patch.object(
+            cmdshellmcp2.subprocess, "run", wraps=cmdshellmcp2.subprocess.run
+        ) as execute:
+            self.assertEqual(self.run_command("cmdshell", "echo -n 'hello world' '' tail"),
+                             (0, "hello world  tail", ""))
+            self.assertEqual(execute.call_args.args[0], ["echo", "-n", "hello world", "", "tail"])
+            self.assertEqual(self.run_command("cmdshell", "echo"), (0, "\n", ""))
+            self.assertEqual(execute.call_args.args[0], ["echo"])
+
+    def test_cmdshell_denial_and_path_errors_return_nonzero(self):
+        with mock.patch.object(cmdshellmcp2, "ALLOWED_COMMANDS", ["echo"]):
+            for command, error in (("disallowed-command", "Access Denied:"), ("echo ../outside", "Error:")):
+                with self.subTest(command=command):
+                    status, stdout, stderr = self.run_command("cmdshell", command)
+                    self.assertEqual(status, 1)
+                    self.assertEqual(stdout, "")
+                    self.assertIn(error, stderr)
 
     def test_read_stdout_and_local_output_preserve_text(self):
         text = "héllo 世界\nlast line"

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Access cmdshellmcp file tools and download text files into a local ZIP archive."""
+"""Run cmdshellmcp commands, access file tools, and download text files as ZIP."""
 
 import argparse
 import asyncio
 import getpass
 import os
+import shlex
 from pathlib import Path, PurePosixPath
 import sys
 import tempfile
@@ -18,6 +19,16 @@ def zip_filename(value: str) -> Path:
     if path.suffix.lower() != ".zip":
         raise argparse.ArgumentTypeError("filename must end in .zip")
     return path
+
+
+def remote_command(value: str) -> list[str]:
+    try:
+        tokens = shlex.split(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid remote command quoting: {exc}") from exc
+    if not tokens or not tokens[0]:
+        raise argparse.ArgumentTypeError("remote command must contain a command name")
+    return tokens
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     dlzip.add_argument("filename", type=zip_filename, metavar="filename.zip")
     dlzip.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
     dlzip.add_argument("--overwrite", action="store_true", help="overwrite filename.zip")
+    shell = commands.add_parser(
+        "cmdshell", parents=[common], help="run a quoted remote command line",
+        description='Run a remote command: pass the full command line as ONE quoted string after URL.',
+    )
+    shell.add_argument("url", help="MCP server URL, e.g. http://127.0.0.1:8003/mcp")
+    shell.add_argument("remote_command", type=remote_command, metavar='"command arg1 arg2 ..."',
+                       help="required quoted remote command line; parsed using shlex")
     descriptions = {
         "listFiles": "list remote directory entries",
         "readFile": "read a remote UTF-8 text file",
@@ -127,6 +145,16 @@ async def download_zip(filename: Path, url: str, auth: str | None, overwrite: bo
             temporary.unlink(missing_ok=True)
 
 
+async def run_cmdshell(args: argparse.Namespace, token: str | None) -> None:
+    async with Client(args.url, auth=token or None) as client:
+        text = await call_text(client, "cmdshell", {
+            "command": args.remote_command[0], "args": args.remote_command[1:],
+        })
+    if text.startswith(("Access Denied:", "Error:", "Error executing command:")):
+        raise RuntimeError(text)
+    sys.stdout.write(text)
+
+
 async def run_file_tool(args: argparse.Namespace, token: str | None) -> None:
     if args.command in ("listFiles", "mkdir", "rmdir"):
         arguments = {"path": args.path}
@@ -177,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "dlzip":
             count = asyncio.run(download_zip(args.filename, args.url, token, args.overwrite))
             print(f"Downloaded {count} file(s) to {args.filename}")
+        elif args.command == "cmdshell":
+            asyncio.run(run_cmdshell(args, token))
         else:
             asyncio.run(run_file_tool(args, token))
     except (KeyboardInterrupt, EOFError):
