@@ -661,6 +661,37 @@ names using newlines, filenames containing newlines cannot be represented
 reliably by this API. A download consists of sequential reads, so remote files
 should stay unchanged while it runs.
 
+### Remote command: `cmdshell`
+
+**Pass the entire remote command line as one quoted string immediately after
+the URL**, followed by options such as `--auth TOKEN`:
+
+```bash
+python cmdshellClient.py cmdshell URL "command arg1 arg2 ..." --auth TOKEN
+python cmdshellClient.py cmdshell http://127.0.0.1:8003/mcp "ls -la" --auth TOKEN
+python cmdshellClient.py cmdshell http://127.0.0.1:8003/mcp "cat 'notes with spaces.txt'" --auth TOKEN
+```
+
+The positional arguments after `cmdshell` are the MCP endpoint URL and the
+**single quoted command string**. The client tokenizes that string with
+`shlex.split()`, passing the first token as `command` and the remaining tokens
+as the `args` list to the server's `cmdshell` tool. For example, `"ls -la"`
+becomes `command="ls"`, `args=["-la"]`. Inner quotes preserve arguments containing
+spaces. An empty command or unmatched inner quotes produces an argument error.
+Do not pass the command and its arguments as separate unquoted CLI arguments.
+
+`--auth TOKEN` uses the same authentication setup as the other commands:
+explicit `--auth` takes precedence over `CSMCP_AUTH_TOKEN`, followed by an
+interactive prompt if neither is provided. Use `--auth ""` to attempt without
+authentication. Run `python cmdshellClient.py cmdshell -h` for help.
+
+The command runs under the server's allowlist and working-directory rules.
+Pipes, redirection, and other shell operators are not interpreted as a shell
+script. Returned command output is written to stdout without adding a newline;
+reported tool errors and access denials go to stderr with a nonzero client exit
+status. The current tool returns a failing subprocess's stderr as plain text,
+so the client cannot reliably distinguish that from successful command output.
+
 ### File tool commands
 
 For these commands, the URL is the first positional argument **after the command**.
